@@ -11,9 +11,8 @@ defmodule ConfigApi.Application do
     ConfigApi.DB.setup()
 
     children = [
-       {Plug.Cowboy, scheme: :http, plug: ConfigApiWeb.Router, options: [port: 4000]}
-      # Starts a worker by calling: ConfigApi.Worker.start_link(arg)
-      # {ConfigApi.Worker, arg}
+      ConfigApi.ConfigUpdateWorker,
+      {Plug.Cowboy, scheme: :http, plug: ConfigApiWeb.Router, options: [port: 4000]}
     ]
     Logger.info("Server running on http://HOST:4000")
     # See https://hexdocs.pm/elixir/Supervisor.html

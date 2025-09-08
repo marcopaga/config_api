@@ -11,10 +11,22 @@ defmodule ConfigApi.ConfigStore do
   end
 
   def put(name, value) do
+    # Get old value before update
+    old_value = case get(name) do
+      {:ok, val} -> val
+      {:error, :not_found} -> nil
+    end
+
+    # Perform update in transaction
     Memento.transaction! fn ->
       %ConfigValue{name: name, value: value}
       |> Memento.Query.write()
     end
+
+    # Notify worker (async, non-blocking)
+    timestamp = DateTime.utc_now()
+    send(:config_update_worker, {:config_updated, name, old_value, value, timestamp})
+
     {:ok, value}
   end
 

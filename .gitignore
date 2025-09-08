@@ -24,3 +24,5 @@ config_api-*.tar
 
 # Mnesia Databases configured for Memento
 .mnesia
+
+qdrant_storage/
