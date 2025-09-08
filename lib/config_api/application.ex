@@ -8,13 +8,15 @@ defmodule ConfigApi.Application do
 
   @impl true
   def start(_type, _args) do
-    ConfigApi.DB.setup()
-
     children = [
+      ConfigApi.EventStore,
+      ConfigApi.Projections.ConfigStateProjection,
       ConfigApi.ConfigUpdateWorker,
       {Plug.Cowboy, scheme: :http, plug: ConfigApiWeb.Router, options: [port: 4000]}
     ]
-    Logger.info("Server running on http://HOST:4000")
+
+    Logger.info("Server running on http://localhost:4000")
+
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: ConfigApi.Supervisor]

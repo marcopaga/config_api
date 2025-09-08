@@ -1,0 +1,75 @@
+openapi: 3.1.0
+info:
+  title: Config API
+  version: 1.0.0
+servers:
+  - url: http://localhost:4000
+paths:
+  /config:
+    get:
+      summary: Liste aller Konfigurationswerte
+      responses:
+        '200':
+          description: Erfolgreich
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+    post:
+      summary: Setze mehrere Konfigurationswerte
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+      responses:
+        '200':
+          description: Erfolgreich gespeichert
+  /config/{key}:
+    get:
+      summary: Hole einen einzelnen Konfigurationswert
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Gefunden
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  value:
+                    type: string
+        '404':
+          description: Nicht gefunden
+    put:
+      summary: Setze einen einzelnen Konfigurationswert
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+      responses:
+        '200':
+          description: Erfolgreich gesetzt
