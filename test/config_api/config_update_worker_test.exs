@@ -166,7 +166,10 @@ defmodule ConfigApi.ConfigUpdateWorkerTest do
 
       assert log_output =~ "received unexpected message"
       # Should contain at least 3 warning messages
-      warning_count = log_output |> String.split("unexpected message") |> length() - 1
+      warning_count =
+        (log_output
+          |> String.split("unexpected message")
+          |> length()) - 1
       assert warning_count >= 3
     end
 
