@@ -18,7 +18,7 @@ jobs:
       postgres:
         image: postgres:14-alpine
         env:
-          POSTGRES_DB: config_api_eventstore
+          POSTGRES_DB: config_api_eventstore_test
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
@@ -55,7 +55,16 @@ jobs:
             sleep 2
           done
 
+      - name: Set up database
+        env:
+          MIX_ENV: test
+          POSTGRES_HOST: localhost
+        run: |
+          mix event_store.create
+          mix event_store.init
+
       - name: Run tests
         env:
-          DATABASE_URL: "ecto://postgres:postgres@localhost:5432/config_api_eventstore"
+          MIX_ENV: test
+          POSTGRES_HOST: localhost
         run: mix test
