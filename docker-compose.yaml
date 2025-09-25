@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:14-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: config_api_eventstore
       POSTGRES_USER: postgres
