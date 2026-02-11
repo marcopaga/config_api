@@ -10,7 +10,12 @@
       "Bash(docker-compose up:*)",
       "Bash(MIX_ENV=dev mix event_store.create:*)",
       "Bash(MIX_ENV=dev mix event_store.init:*)",
-      "Bash(MIX_ENV=test mix event_store.init:*)"
+      "Bash(MIX_ENV=test mix event_store.init:*)",
+      "Bash(iex -S mix)",
+      "Bash(xargs kill:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(iex -S mix:*)",
+      "Bash(elixir:*)"
     ]
   },
   "sandbox": {

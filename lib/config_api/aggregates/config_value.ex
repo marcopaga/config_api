@@ -41,18 +41,14 @@ defmodule ConfigApi.Aggregates.ConfigValue do
   Executes the set_value command on the aggregate.
 
   Business Rules:
-  - Cannot set value on a deleted config
   - Name and value must be binary strings
+  - Allows resurrection (setting value on deleted config)
   - Generates ConfigValueSet event with old_value for audit trail
 
   Returns {:ok, event, new_aggregate} or {:error, reason}
   """
   @spec set_value(t(), String.t(), String.t()) ::
           {:ok, ConfigValueSet.t(), t()} | {:error, atom()}
-  def set_value(%__MODULE__{deleted: true}, _name, _value) do
-    {:error, :config_deleted}
-  end
-
   def set_value(%__MODULE__{} = config, name, value)
       when is_binary(name) and is_binary(value) do
     event = ConfigValueSet.new(name, value, config.value)

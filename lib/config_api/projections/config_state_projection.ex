@@ -14,6 +14,10 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
 
   alias ConfigApi.Events.{ConfigValueSet, ConfigValueDeleted}
 
+  # Ensure event type atoms exist for EventStore deserialization
+  _ = :"ConfigApi.Events.ConfigValueSet"
+  _ = :"ConfigApi.Events.ConfigValueDeleted"
+
   @table_name :config_state_projection
 
   ## Client API
@@ -61,7 +65,9 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
     rebuild_from_events()
 
     # Subscribe to new events
-    :ok = subscribe_to_events()
+    # TODO: Fix event deserialization in Publisher before enabling subscriptions
+    # :ok = subscribe_to_events()
+    Logger.warning("Event subscriptions disabled - projection will only update on restart")
 
     config_count = :ets.info(@table_name, :size)
     Logger.info("ConfigStateProjection started with #{config_count} configs")
@@ -91,21 +97,64 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
   ## Private Functions
 
   defp rebuild_from_events do
-    case ConfigApi.EventStore.read_stream_forward("$all") do
-      {:ok, recorded_events} ->
-        Logger.debug("Replaying #{length(recorded_events)} events...")
-        Enum.each(recorded_events, fn recorded_event ->
-          apply_event(recorded_event.data)
+    Logger.info("rebuild_from_events: Reading all config streams...")
+
+    try do
+      # Get all stream names from the database
+      # Then read from each stream
+      config = ConfigApi.EventStore.config()
+      {:ok, conn} = Postgrex.start_link(config)
+
+      # Query for all config-* streams
+      {:ok, result} =
+        Postgrex.query(
+          conn,
+          "SELECT stream_uuid FROM streams WHERE stream_uuid LIKE 'config-%' AND deleted_at IS NULL",
+          []
+        )
+
+      GenServer.stop(conn)
+
+      stream_names = Enum.map(result.rows, fn [name] -> name end)
+      Logger.info("Found #{length(stream_names)} config streams to rebuild from")
+
+      # Read events from each stream
+      all_events =
+        Enum.flat_map(stream_names, fn stream_name ->
+          case ConfigApi.EventStore.read_stream_forward(stream_name) do
+            {:ok, events} ->
+              Logger.debug("Read #{length(events)} events from #{stream_name}")
+              events
+
+            {:error, reason} ->
+              Logger.warning("Failed to read #{stream_name}: #{inspect(reason)}")
+              []
+          end
         end)
-        :ok
 
-      {:error, :stream_not_found} ->
-        Logger.debug("No events found, starting with empty state")
-        :ok
+      case all_events do
+        [] ->
+          Logger.warning("No events found in any streams, starting with empty state")
+          :ok
 
-      {:error, reason} ->
-        Logger.error("Failed to read $all stream: #{inspect(reason)}")
-        Logger.warning("Starting with empty state due to event read failure")
+        events ->
+          Logger.info("Replaying #{length(events)} events from all config streams...")
+
+          Enum.each(events, fn recorded_event ->
+            Logger.debug(
+              "Applying event: #{inspect(recorded_event.event_type)}"
+            )
+
+            apply_event(recorded_event.data)
+          end)
+
+          Logger.info("Successfully rebuilt projection from #{length(events)} events")
+          :ok
+      end
+    rescue
+      error ->
+        Logger.error("Failed to rebuild from events: #{inspect(error)}")
+        Logger.warning("Starting with empty state due to rebuild failure")
         :ok
     end
   end

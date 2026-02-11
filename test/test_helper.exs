@@ -7,6 +7,10 @@ case Mix.Task.run("event_store.init", ["--quiet"]) do
   _ -> :ok
 end
 
-# Start EventStore for tests
+# Start EventStore for tests (may already be started by application)
 {:ok, _} = Application.ensure_all_started(:postgrex)
-{:ok, _} = ConfigApi.EventStore.start_link()
+
+case ConfigApi.EventStore.start_link() do
+  {:ok, _pid} -> :ok
+  {:error, {:already_started, _pid}} -> :ok
+end

@@ -66,7 +66,7 @@ defmodule ConfigApi.Aggregates.ConfigValueTest do
       assert agg3.version == 3
     end
 
-    test "cannot set value on deleted config" do
+    test "can set value on deleted config (resurrection)" do
       aggregate = %ConfigValue{
         name: "deleted_key",
         value: "old_value",
@@ -74,7 +74,13 @@ defmodule ConfigApi.Aggregates.ConfigValueTest do
         deleted: true
       }
 
-      assert {:error, :config_deleted} = ConfigValue.set_value(aggregate, "deleted_key", "new_value")
+      assert {:ok, event, new_agg} = ConfigValue.set_value(aggregate, "deleted_key", "new_value")
+      assert event.config_name == "deleted_key"
+      assert event.value == "new_value"
+      assert event.old_value == "old_value"
+      assert new_agg.deleted == false
+      assert new_agg.value == "new_value"
+      assert new_agg.version == 3
     end
 
     test "requires binary name and value" do
