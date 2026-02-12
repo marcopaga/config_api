@@ -38,13 +38,14 @@ defmodule ConfigApiWeb.Router do
 
   alias ConfigApi.ConfigStoreCQRS
 
-  plug Plug.Parsers,
+  plug(Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
     json_decoder: Jason
+  )
 
-  plug :match
-  plug :dispatch
+  plug(:match)
+  plug(:dispatch)
 
   ## API v1 Routes (recommended)
 

@@ -19,7 +19,8 @@ defmodule ConfigApi.Aggregates.ConfigValueTest do
     test "sets value on new aggregate" do
       aggregate = ConfigValue.new()
 
-      assert {:ok, event, new_aggregate} = ConfigValue.set_value(aggregate, "api_key", "secret123")
+      assert {:ok, event, new_aggregate} =
+               ConfigValue.set_value(aggregate, "api_key", "secret123")
 
       # Event is correct
       assert %ConfigValueSet{} = event
@@ -42,7 +43,8 @@ defmodule ConfigApi.Aggregates.ConfigValueTest do
         deleted: false
       }
 
-      assert {:ok, event, new_aggregate} = ConfigValue.set_value(aggregate, "api_key", "new_secret")
+      assert {:ok, event, new_aggregate} =
+               ConfigValue.set_value(aggregate, "api_key", "new_secret")
 
       # Event records old value
       assert event.old_value == "old_secret"
