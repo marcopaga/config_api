@@ -18,6 +18,20 @@ defmodule ConfigApiWeb.Router do
   plug :match
   plug :dispatch
 
+  # Health check endpoint
+  # GET /health - Check if application and critical components are running
+  get "/health" do
+    health_status = check_health()
+
+    case health_status do
+      {:ok, status} ->
+        send_resp(conn, 200, Jason.encode!(status))
+
+      {:error, status} ->
+        send_resp(conn, 503, Jason.encode!(status))
+    end
+  end
+
   # Standard CRUD endpoints (migrated to CQRS)
 
   # GET /config - List all configurations
@@ -121,6 +135,52 @@ defmodule ConfigApiWeb.Router do
     case DateTime.from_iso8601(timestamp_string) do
       {:ok, datetime, _offset} -> {:ok, datetime}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp check_health do
+    checks = %{
+      eventstore: check_eventstore(),
+      projection: check_projection(),
+      database: check_database()
+    }
+
+    all_healthy = Enum.all?(checks, fn {_key, status} -> status == :ok end)
+
+    status = %{
+      status: if(all_healthy, do: "healthy", else: "unhealthy"),
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+      checks: checks
+    }
+
+    if all_healthy do
+      {:ok, status}
+    else
+      {:error, status}
+    end
+  end
+
+  defp check_eventstore do
+    case Process.whereis(ConfigApi.EventStore) do
+      nil -> :down
+      pid when is_pid(pid) -> :ok
+    end
+  end
+
+  defp check_projection do
+    case Process.whereis(ConfigApi.Projections.ConfigStateProjection) do
+      nil -> :down
+      pid when is_pid(pid) -> :ok
+    end
+  end
+
+  defp check_database do
+    # Try to get all configs - if this works, the projection is functional
+    try do
+      _configs = ConfigStoreCQRS.all()
+      :ok
+    rescue
+      _ -> :error
     end
   end
 end

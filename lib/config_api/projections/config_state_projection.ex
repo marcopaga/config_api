@@ -66,9 +66,8 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
     rebuild_from_events()
 
     # Subscribe to new events
-    # TODO: Fix event deserialization in Publisher before enabling subscriptions
-    # :ok = subscribe_to_events()
-    Logger.warning("Event subscriptions disabled - projection will only update on restart")
+    {:ok, _subscription} = subscribe_to_events()
+    Logger.info("Event subscriptions enabled")
 
     config_count = :ets.info(@table_name, :size)
     Logger.info("ConfigStateProjection started with #{config_count} configs")
@@ -78,8 +77,18 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
 
   @impl true
   def handle_info({:events, events}, state) do
+    Logger.info("Received #{length(events)} events from subscription")
+
     # Process each event
-    Enum.each(events, &apply_event/1)
+    # Transient subscriptions send raw event structs, not RecordedEvents
+    Enum.each(events, fn event ->
+      # If it's a RecordedEvent (from rebuild), extract .data
+      # If it's already an event struct (from subscription), use it directly
+      event_data = if Map.has_key?(event, :data), do: event.data, else: event
+      Logger.debug("Processing event: #{inspect(event_data.__struct__)}")
+      apply_event(event_data)
+    end)
+
     {:noreply, state}
   end
 
@@ -91,7 +100,7 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
 
   @impl true
   def handle_info(msg, state) do
-    Logger.warning("ConfigStateProjection received unexpected message: #{inspect(msg)}")
+    Logger.warning("ConfigStateProjection received unexpected message: #{inspect(msg, pretty: true, limit: 5)}")
     {:noreply, state}
   end
 
@@ -167,12 +176,13 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
     end
   end
 
-  # NOTE: Event subscriptions are disabled due to deserialization issues
-  # The projection rebuilds from events on startup, which is sufficient for current needs
-  # To re-enable subscriptions in the future:
-  # 1. Fix atom deserialization in EventStore notification publisher
-  # 2. Uncomment the subscribe_to_events call in init/1
-  # 3. Uncomment this function and the handle_info({:subscribed, _}, state) callback
+  defp subscribe_to_events do
+    # Use transient subscription for real-time updates
+    # Subscribe to $all stream to receive all events
+    :ok = ConfigApi.EventStore.subscribe("$all")
+    Logger.debug("Subscribed to $all stream")
+    {:ok, nil}
+  end
 
   defp apply_event(%ConfigValueSet{config_name: name, value: value}) do
     :ets.insert(@table_name, {name, value})
