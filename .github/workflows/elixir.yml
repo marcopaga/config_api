@@ -77,7 +77,7 @@ jobs:
         EVENTSTORE_USERNAME: postgres
         EVENTSTORE_PASSWORD: postgres
     - name: Run unit tests
-      run: mix test
+      run: mix test --max-cases 1
       env:
         MIX_ENV: test
         EVENTSTORE_HOST: localhost
