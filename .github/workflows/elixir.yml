@@ -7,9 +7,9 @@ name: Elixir CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main, develop, feature/*]
   pull_request:
-    branches: [ "main" ]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -36,20 +36,35 @@ jobs:
           - 5432:5432
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
     - name: Set up Elixir
-      uses: erlef/setup-beam@61e01a43a562a89bfc54c7f9a378ff67b03e4a21 # v1.16.0
+      uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
       with:
-        elixir-version: '1.18.4' # [Required] Define the Elixir version
-        otp-version: '28.0.2'      # [Required] Define the Erlang/OTP version
+        elixir-version: '1.18.4'
+        otp-version: '28.0.2'
+
     - name: Restore dependencies cache
-      uses: actions/cache@v3
+      uses: actions/cache@b7e8d49f17405cc70c1c120101943203c98d3a4b # v4
       with:
-        path: deps
+        path: |
+          deps
+          _build
         key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
-        restore-keys: ${{ runner.os }}-mix-
+        restore-keys: |
+          ${{ runner.os }}-mix-
     - name: Install dependencies
       run: mix deps.get
+
+    - name: Check code formatting
+      run: mix format --check-formatted
+
+    - name: Compile with warnings as errors
+      run: mix compile --warnings-as-errors
+      env:
+        MIX_ENV: test
+
     - name: Initialize EventStore
       run: |
         mix event_store.create
@@ -61,7 +76,7 @@ jobs:
         EVENTSTORE_DATABASE: config_api_eventstore
         EVENTSTORE_USERNAME: postgres
         EVENTSTORE_PASSWORD: postgres
-    - name: Run tests
+    - name: Run unit tests
       run: mix test
       env:
         MIX_ENV: test
@@ -70,3 +85,22 @@ jobs:
         EVENTSTORE_DATABASE: config_api_eventstore
         EVENTSTORE_USERNAME: postgres
         EVENTSTORE_PASSWORD: postgres
+
+    - name: Generate test coverage report
+      run: mix test --cover
+      env:
+        MIX_ENV: test
+        EVENTSTORE_HOST: localhost
+        EVENTSTORE_PORT: 5432
+        EVENTSTORE_DATABASE: config_api_eventstore
+        EVENTSTORE_USERNAME: postgres
+        EVENTSTORE_PASSWORD: postgres
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+      with:
+        name: test-results
+        path: _build/test/lib/config_api/
+        retention-days: 7
+        if-no-files-found: ignore
