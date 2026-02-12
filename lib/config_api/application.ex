@@ -28,8 +28,8 @@ defmodule ConfigApi.Application do
     _ = @event_type_atoms
 
     children = [
-      # Note: EventStore and ConfigStateProjection are started manually in test_helper
-      # In production, they should be added here
+      # Note: EventStore and ConfigStateProjection are started manually in test_helper for testing
+      # TODO Phase 6: Add them here for production deployment
       ConfigApi.ConfigUpdateWorker,
       {Plug.Cowboy, scheme: :http, plug: ConfigApiWeb.Router, options: [port: 4000]}
     ]

@@ -15,7 +15,9 @@
       "Bash(xargs kill:*)",
       "Bash(docker-compose exec:*)",
       "Bash(iex -S mix:*)",
-      "Bash(elixir:*)"
+      "Bash(elixir:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)"
     ]
   },
   "sandbox": {

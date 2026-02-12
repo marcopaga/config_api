@@ -14,11 +14,12 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
 
   alias ConfigApi.Events.{ConfigValueSet, ConfigValueDeleted}
 
-  # Ensure event type atoms exist for EventStore deserialization
-  _ = :"ConfigApi.Events.ConfigValueSet"
-  _ = :"ConfigApi.Events.ConfigValueDeleted"
-
   @table_name :config_state_projection
+
+  # Ensure event modules are loaded and atoms exist for deserialization
+  # This MUST happen at module compile time
+  @event_modules [ConfigValueSet, ConfigValueDeleted]
+  def __event_modules__, do: @event_modules
 
   ## Client API
 
@@ -98,6 +99,13 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
 
   defp rebuild_from_events do
     Logger.info("rebuild_from_events: Reading all config streams...")
+
+    # Ensure event modules are loaded and atoms exist before reading
+    Enum.each(@event_modules, fn mod ->
+      Code.ensure_loaded!(mod)
+      # Force the module atom to exist in the atom table
+      _ = mod.__info__(:module)
+    end)
 
     try do
       # Get all stream names from the database
