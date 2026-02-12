@@ -232,7 +232,7 @@ curl -X PUT http://localhost:4000/config/database_url \
 # OK
 ```
 
-**Note:** After writing, restart the application to see the value in reads, or use the event history endpoint for immediate verification.
+**Note:** After writing, restart the application to see the value in reads, /or use the event history endpoint for immediate verification.
 
 #### Delete Configuration
 ```bash

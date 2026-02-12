@@ -61,6 +61,9 @@ defmodule ConfigApi.ConfigStoreCQRS do
          :ok <- append_event(name, event) do
       Logger.debug("ConfigStoreCQRS.put/2 successfully stored config #{name}")
 
+      # Immediately update projection (synchronous for immediate consistency)
+      ConfigApi.Projections.ConfigStateProjection.apply_event_immediately(event)
+
       # Notify worker (async, non-blocking)
       notify_worker(:config_updated, name, aggregate, value)
 
@@ -92,6 +95,9 @@ defmodule ConfigApi.ConfigStoreCQRS do
          {:ok, event, _new_aggregate} <- ConfigValue.delete_value(aggregate),
          :ok <- append_event(name, event) do
       Logger.debug("ConfigStoreCQRS.delete/1 successfully deleted config #{name}")
+
+      # Immediately update projection (synchronous for immediate consistency)
+      ConfigApi.Projections.ConfigStateProjection.apply_event_immediately(event)
 
       # Notify worker
       notify_worker(:config_deleted, name, aggregate, nil)

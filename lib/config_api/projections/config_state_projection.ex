@@ -52,6 +52,17 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
     |> Enum.map(fn {name, value} -> %{name: name, value: value} end)
   end
 
+  @doc """
+  Immediately apply an event to the projection.
+
+  Called synchronously after appending events for immediate consistency.
+  """
+  def apply_event_immediately(event) do
+    apply_event(event)
+    Logger.debug("Applied event immediately to projection: #{inspect(event.__struct__)}")
+    :ok
+  end
+
   ## Server Callbacks
 
   @impl true
@@ -80,14 +91,20 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
     Logger.info("Received #{length(events)} events from subscription")
 
     # Process each event
-    # Transient subscriptions send raw event structs, not RecordedEvents
+    # Persistent subscriptions send RecordedEvent structs
     Enum.each(events, fn event ->
-      # If it's a RecordedEvent (from rebuild), extract .data
-      # If it's already an event struct (from subscription), use it directly
+      # If it's a RecordedEvent (from subscription or rebuild), extract .data
+      # If it's already an event struct, use it directly
       event_data = if Map.has_key?(event, :data), do: event.data, else: event
       Logger.debug("Processing event: #{inspect(event_data.__struct__)}")
       apply_event(event_data)
     end)
+
+    # Acknowledge events for persistent subscription
+    if subscription = Map.get(state, :subscription) do
+      Logger.debug("Acknowledging #{length(events)} events")
+      ConfigApi.EventStore.ack(subscription, events)
+    end
 
     {:noreply, state}
   end
@@ -177,11 +194,15 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
   end
 
   defp subscribe_to_events do
-    # Use transient subscription for real-time updates
-    # Subscribe to $all stream to receive all events
-    :ok = ConfigApi.EventStore.subscribe("$all")
-    Logger.debug("Subscribed to $all stream")
-    {:ok, nil}
+    # Use persistent subscription for reliable event delivery
+    # This creates a durable subscription that survives restarts
+    {:ok, subscription} = ConfigApi.EventStore.subscribe_to_all_streams(
+      "config_state_projection_subscription",
+      self(),
+      start_from: :current
+    )
+    Logger.info("Created persistent subscription: #{inspect(subscription)}")
+    {:ok, subscription}
   end
 
   defp apply_event(%ConfigValueSet{config_name: name, value: value}) do
