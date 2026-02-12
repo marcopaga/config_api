@@ -115,31 +115,56 @@ docker-compose down
 5. **GenServer**: OTP pattern for projection process
 6. **EventStore**: PostgreSQL-backed event persistence
 
+## API Specifications
+
+ConfigApi provides comprehensive machine-readable API specifications in the `spec/` directory:
+
+- **OpenAPI 3.1**: `spec/openapi/configapi-v1.yaml` - Complete REST API specification
+- **JSON Schema**: `spec/json-schema/` - Domain event and aggregate schemas (draft-07)
+- **AsyncAPI 3.0**: `spec/asyncapi/config-events-v1.yaml` - Event streaming specification
+- **Documentation**: `spec/README.md` - Usage guide and examples
+
+### Specification Testing
+
+Run contract tests to validate API against specifications:
+```bash
+mix test test/spec/                     # All specification tests (61 tests)
+mix test test/spec/openapi_contract_test.exs   # OpenAPI contract tests
+mix test test/spec/event_schema_test.exs       # Event schema validation
+mix test test/spec/spec_validation_test.exs    # Spec file validation
+```
+
+### API Versioning
+
+All endpoints use `/v1` prefix for proper versioning:
+- **Versioned**: `/v1/config`, `/v1/health` (recommended)
+- **Legacy**: `/config`, `/health` (deprecated, backward compatibility only)
+
 ## API Examples
 
 ```bash
-# List all configurations
-curl http://localhost:4000/config
+# List all configurations (versioned)
+curl http://localhost:4000/v1/config
 
 # Get a specific value
-curl http://localhost:4000/config/api_key
+curl http://localhost:4000/v1/config/api_key
 
 # Set a value (CQRS command)
-curl -X PUT http://localhost:4000/config/api_key \
+curl -X PUT http://localhost:4000/v1/config/api_key \
      -H "Content-Type: application/json" \
      -d '{"value":"secret123"}'
 
 # Delete a configuration
-curl -X DELETE http://localhost:4000/config/api_key
+curl -X DELETE http://localhost:4000/v1/config/api_key
 
 # Get event history (audit trail)
-curl http://localhost:4000/config/api_key/history
+curl http://localhost:4000/v1/config/api_key/history
 
 # Time-travel query (ISO8601 timestamp)
-curl http://localhost:4000/config/api_key/at/2024-01-15T10:30:00Z
+curl http://localhost:4000/v1/config/api_key/at/2024-01-15T10:30:00Z
 
-# List all (returns JSON array with name/value pairs)
-curl http://localhost:4000/config
+# Health check
+curl http://localhost:4000/v1/health
 ```
 
 ## Testing

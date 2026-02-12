@@ -102,6 +102,7 @@ curl http://localhost:4000/health
 - **[Quick Start Guide](docs/guides/quick-start.md)** - Get running in 5 minutes
 - **[CQRS Explained](docs/architecture/cqrs.md)** - Understanding the pattern
 - **[REST API Reference](docs/api/rest-api.md)** - Complete endpoint documentation
+- **[API Specifications](spec/README.md)** - OpenAPI, JSON Schema, and AsyncAPI specs
 
 ## 🏗️ Architecture
 
@@ -127,6 +128,43 @@ This application uses a complete CQRS/Event Sourcing architecture:
 - Writes immediately persist events to EventStore
 - Projection updates synchronously after write
 - Reads reflect writes immediately (no restart needed)
+
+## 📋 API Documentation
+
+ConfigApi provides comprehensive **machine-readable API specifications**:
+
+- **[OpenAPI 3.1](spec/openapi/configapi-v1.yaml)** - REST API specification with CQRS annotations
+- **[JSON Schema](spec/json-schema/)** - Domain event and aggregate schemas
+- **[AsyncAPI 3.0](spec/asyncapi/config-events-v1.yaml)** - Event streaming documentation
+- **[Specification Guide](spec/README.md)** - How to use and generate documentation
+
+### API Versioning
+
+All endpoints are available under the `/v1` prefix:
+```bash
+GET /v1/health              # Health check
+GET /v1/config              # List all configurations
+GET /v1/config/:name        # Get specific value
+PUT /v1/config/:name        # Set value
+DELETE /v1/config/:name     # Delete configuration
+GET /v1/config/:name/history      # Event history
+GET /v1/config/:name/at/:timestamp # Time-travel query
+```
+
+**Note**: Unversioned routes (`/config`) are deprecated but maintained for backward compatibility.
+
+### Generate Interactive Documentation
+
+```bash
+# Install Redocly CLI
+npm install -g @redocly/cli
+
+# Generate HTML documentation
+npx @redocly/cli build-docs spec/openapi/configapi-v1.yaml -o docs/api-reference.html
+
+# Validate specification
+npx @redocly/cli lint spec/openapi/configapi-v1.yaml
+```
 
 ## Prerequisites
 
