@@ -129,12 +129,6 @@ components:
     Timestamp:
       $ref: './parameters/path.yaml#/Timestamp'
 
-  examples:
-    ConfigOperations:
-      $ref: './examples/config-operations.yaml'
-    EventHistory:
-      $ref: './examples/event-history.yaml'
-
   securitySchemes:
     # Placeholder for future authentication
     ApiKeyAuth:
