@@ -51,6 +51,7 @@ defmodule ConfigApi.Application do
           | base_children
         ]
       end
+
     Logger.info("Server running on http://HOST:4000")
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options

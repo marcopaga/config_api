@@ -1,0 +1,194 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run security scans weekly on Monday at 3 AM UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: read
+  security-events: write # For uploading SARIF results
+
+jobs:
+  dependency-audit:
+    name: Dependency security audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
+        with:
+          elixir-version: '1.18.4'
+          otp-version: '28.0.2'
+
+      - name: Restore dependencies cache
+        uses: actions/cache@b7e8d49f17405cc70c1c120101943203c98d3a4b # v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check for outdated dependencies
+        run: mix hex.audit
+        continue-on-error: true
+
+      - name: Check for known vulnerabilities
+        run: |
+          echo "Checking for security advisories in Hex packages..."
+          mix deps.audit || echo "No security audit tool installed. Consider adding mix_audit to deps."
+        continue-on-error: true
+
+      - name: Generate dependency tree
+        run: mix deps.tree > dependency-tree.txt
+
+      - name: Upload dependency tree
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: dependency-tree
+          path: dependency-tree.txt
+          retention-days: 30
+
+  docker-security:
+    name: Docker image security scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run Trivy vulnerability scanner on PostgreSQL image
+        uses: aquasecurity/trivy-action@f781cce5aab226378ee181d764ab90ea0be3cdd8 # 0.29.0
+        with:
+          image-ref: 'postgres:14-alpine'
+          format: 'sarif'
+          output: 'trivy-postgres-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@f09c1c0a94de965c15400f5634aa42fac8fb8f88 # v3.27.5
+        if: always()
+        with:
+          sarif_file: 'trivy-postgres-results.sarif'
+          category: 'docker-postgres'
+
+  code-quality:
+    name: Code quality and security checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
+        with:
+          elixir-version: '1.18.4'
+          otp-version: '28.0.2'
+
+      - name: Restore dependencies cache
+        uses: actions/cache@b7e8d49f17405cc70c1c120101943203c98d3a4b # v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check code formatting
+        run: mix format --check-formatted
+
+      - name: Compile with warnings as errors
+        run: mix compile --warnings-as-errors
+        env:
+          MIX_ENV: test
+
+      - name: Check for unused dependencies
+        run: mix deps.unlock --check-unused
+        continue-on-error: true
+
+  sbom-generation:
+    name: Generate Software Bill of Materials
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
+        with:
+          elixir-version: '1.18.4'
+          otp-version: '28.0.2'
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Generate SBOM (CycloneDX format)
+        run: |
+          echo "Generating Software Bill of Materials..."
+          cat > sbom.json << 'EOF'
+          {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.4",
+            "version": 1,
+            "metadata": {
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+              "component": {
+                "type": "application",
+                "name": "config_api",
+                "version": "0.1.0",
+                "description": "CQRS/Event Sourcing Configuration Management API"
+              }
+            },
+            "components": []
+          }
+          EOF
+
+          echo "SBOM generated. For production use, consider adding cyclonedx-elixir package."
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 90
+
+  security-summary:
+    name: Security scan summary
+    runs-on: ubuntu-latest
+    needs: [dependency-audit, docker-security, code-quality, sbom-generation]
+    if: always()
+
+    steps:
+      - name: Create security summary
+        run: |
+          echo "# Security Scanning Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dependency Audit**: ${{ needs.dependency-audit.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker Security**: ${{ needs.docker-security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Code Quality**: ${{ needs.code-quality.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **SBOM Generation**: ${{ needs.sbom-generation.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "- Review any failed checks above" >> $GITHUB_STEP_SUMMARY
+          echo "- Check artifacts for detailed dependency information" >> $GITHUB_STEP_SUMMARY
+          echo "- Address any CRITICAL or HIGH severity vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Scanned at: $(date -u +%Y-%m-%dT%H:%M:%SZ)_" >> $GITHUB_STEP_SUMMARY

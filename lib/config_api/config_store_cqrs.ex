@@ -53,7 +53,9 @@ defmodule ConfigApi.ConfigStoreCQRS do
   """
   @spec put(String.t(), String.t()) :: {:ok, String.t()} | {:error, atom()}
   def put(name, value) when is_binary(name) and is_binary(value) do
-    Logger.debug("ConfigStoreCQRS.put/2 called with name=#{inspect(name)}, value=#{inspect(value)}")
+    Logger.debug(
+      "ConfigStoreCQRS.put/2 called with name=#{inspect(name)}, value=#{inspect(value)}"
+    )
 
     with {:ok, events} <- load_aggregate_events(name),
          aggregate <- ConfigValue.replay_events(events),

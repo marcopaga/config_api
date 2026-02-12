@@ -3,7 +3,8 @@ ExUnit.start()
 # Ensure EventStore test database is initialized
 case Mix.Task.run("event_store.init", ["--quiet"]) do
   :ok -> :ok
-  {:error, _} -> :ok  # Already initialized
+  # Already initialized
+  {:error, _} -> :ok
   _ -> :ok
 end
 

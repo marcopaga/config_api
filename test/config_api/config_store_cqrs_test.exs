@@ -283,7 +283,8 @@ defmodule ConfigApi.ConfigStoreCQRSTest do
 
       timestamp_after_delete = DateTime.utc_now()
 
-      assert {:error, :not_found} = ConfigStoreCQRS.get_at_timestamp("key", timestamp_after_delete)
+      assert {:error, :not_found} =
+               ConfigStoreCQRS.get_at_timestamp("key", timestamp_after_delete)
     end
   end
 

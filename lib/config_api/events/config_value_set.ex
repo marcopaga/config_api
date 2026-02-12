@@ -39,7 +39,8 @@ defmodule ConfigApi.Events.ConfigValueSet do
       }
   """
   @spec new(String.t(), String.t(), String.t() | nil) :: t()
-  def new(config_name, value, old_value \\ nil) when is_binary(config_name) and is_binary(value) do
+  def new(config_name, value, old_value \\ nil)
+      when is_binary(config_name) and is_binary(value) do
     %__MODULE__{
       config_name: config_name,
       value: value,

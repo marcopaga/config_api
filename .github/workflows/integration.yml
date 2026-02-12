@@ -1,0 +1,126 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, develop, feature/*]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  integration-tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: config_api_eventstore
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
+        with:
+          elixir-version: '1.18.4'
+          otp-version: '28.0.2'
+
+      - name: Restore dependencies cache
+        uses: actions/cache@b7e8d49f17405cc70c1c120101943203c98d3a4b # v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile application
+        run: mix compile
+        env:
+          MIX_ENV: dev
+
+      - name: Initialize EventStore
+        run: |
+          mix event_store.create
+          mix event_store.init
+        env:
+          MIX_ENV: dev
+          EVENTSTORE_HOST: localhost
+          EVENTSTORE_PORT: 5432
+          EVENTSTORE_DATABASE: config_api_eventstore
+          EVENTSTORE_USERNAME: postgres
+          EVENTSTORE_PASSWORD: postgres
+
+      - name: Start ConfigApi server in background
+        run: |
+          MIX_ENV=dev mix run --no-halt &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+          echo "Started server with PID: $SERVER_PID"
+        env:
+          EVENTSTORE_HOST: localhost
+          EVENTSTORE_PORT: 5432
+          EVENTSTORE_DATABASE: config_api_eventstore
+          EVENTSTORE_USERNAME: postgres
+          EVENTSTORE_PASSWORD: postgres
+
+      - name: Wait for server to be ready
+        run: |
+          echo "Waiting for server to start on http://localhost:4000..."
+          max_attempts=30
+          attempt=0
+
+          while [ $attempt -lt $max_attempts ]; do
+            if curl -s http://localhost:4000/v1/health > /dev/null 2>&1; then
+              echo "Server is ready!"
+              curl -s http://localhost:4000/v1/health | head -20
+              exit 0
+            fi
+
+            attempt=$((attempt + 1))
+            echo "Attempt $attempt/$max_attempts - Server not ready yet, waiting..."
+            sleep 2
+          done
+
+          echo "Server failed to start within expected time"
+          exit 1
+
+      - name: Run integration tests
+        run: ./scripts/integration_test.sh http://localhost:4000
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            echo "Stopping server (PID: $SERVER_PID)"
+            kill $SERVER_PID || true
+          fi
+
+      - name: Upload server logs
+        if: failure()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: server-logs
+          path: |
+            _build/dev/lib/config_api/
+            *.log
+          retention-days: 7
+          if-no-files-found: ignore

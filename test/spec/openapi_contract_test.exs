@@ -256,10 +256,11 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
       Enum.each(history, fn event ->
         assert Map.has_key?(event, :event_type)
         assert is_binary(event.event_type)
+
         assert event.event_type in [
-          "Elixir.ConfigApi.Events.ConfigValueSet",
-          "Elixir.ConfigApi.Events.ConfigValueDeleted"
-        ]
+                 "Elixir.ConfigApi.Events.ConfigValueSet",
+                 "Elixir.ConfigApi.Events.ConfigValueDeleted"
+               ]
 
         assert Map.has_key?(event, :data)
         assert is_map(event.data)
@@ -277,7 +278,9 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
       end)
 
       # Validate ConfigValueSetData schema for set events
-      set_events = Enum.filter(history, &(&1.event_type == "Elixir.ConfigApi.Events.ConfigValueSet"))
+      set_events =
+        Enum.filter(history, &(&1.event_type == "Elixir.ConfigApi.Events.ConfigValueSet"))
+
       Enum.each(set_events, fn event ->
         assert Map.has_key?(event.data, :config_name)
         assert Map.has_key?(event.data, :value)
@@ -289,7 +292,9 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
       end)
 
       # Validate ConfigValueDeletedData schema for delete events
-      delete_events = Enum.filter(history, &(&1.event_type == "Elixir.ConfigApi.Events.ConfigValueDeleted"))
+      delete_events =
+        Enum.filter(history, &(&1.event_type == "Elixir.ConfigApi.Events.ConfigValueDeleted"))
+
       Enum.each(delete_events, fn event ->
         assert Map.has_key?(event.data, :config_name)
         assert Map.has_key?(event.data, :deleted_value)

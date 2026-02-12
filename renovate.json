@@ -1,6 +1,122 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
-  ]
+    "config:recommended",
+    ":maintainLockFilesWeekly",
+    ":semanticCommits",
+    ":enablePreCommit",
+    "group:allNonMajor"
+  ],
+  "labels": ["dependencies"],
+  "assignees": ["marco"],
+  "reviewers": ["marco"],
+  "packageRules": [
+    {
+      "description": "Auto-merge non-breaking Elixir/Hex patches and minors when tests pass",
+      "matchDatasources": ["hex"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "platformAutomerge": true,
+      "ignoreTests": false
+    },
+    {
+      "description": "Auto-merge Docker image patches (PostgreSQL)",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
+      "description": "Group EventStore ecosystem updates - manual review required",
+      "matchPackageNames": ["eventstore", "postgrex"],
+      "groupName": "EventStore ecosystem",
+      "automerge": false,
+      "schedule": ["before 3am on Monday"]
+    },
+    {
+      "description": "Critical security updates - immediate review",
+      "matchUpdateTypes": ["major"],
+      "matchCurrentVersion": "!/^0/",
+      "labels": ["dependencies", "security"],
+      "automerge": false,
+      "schedule": ["at any time"]
+    },
+    {
+      "description": "Major version updates require manual review",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major-update"],
+      "reviewers": ["marco"],
+      "schedule": ["before 3am on Monday"]
+    },
+    {
+      "description": "Development dependencies can auto-merge more aggressively",
+      "matchDepTypes": ["test"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "GitHub Actions - auto-merge patches only with digest pinning",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "pinDigests": true
+    },
+    {
+      "description": "Erlang/Elixir versions in .tool-versions - manual review required",
+      "matchManagers": ["asdf"],
+      "automerge": false,
+      "labels": ["dependencies", "runtime"],
+      "schedule": ["before 3am on the first day of the month"]
+    },
+    {
+      "description": "Group JSON/Schema dependencies",
+      "matchPackageNames": ["jason", "ex_json_schema", "yaml_elixir"],
+      "groupName": "JSON and Schema libraries",
+      "automerge": true,
+      "automergeType": "pr",
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "description": "Group HTTP stack dependencies",
+      "matchPackageNames": ["plug_cowboy", "plug", "cowboy"],
+      "groupName": "HTTP stack",
+      "automerge": false,
+      "schedule": ["before 3am on Monday"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "assignees": ["marco"],
+    "schedule": ["at any time"]
+  },
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "branchConcurrentLimit": 3,
+  "separateMajorMinor": true,
+  "separateMinorPatch": false,
+  "schedule": ["before 3am on Monday"],
+  "timezone": "UTC",
+  "commitMessagePrefix": "chore(deps):",
+  "commitMessageAction": "update",
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "to {{newVersion}}",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "schedule": ["before 3am on Monday"]
+  },
+  "statusCheckVerify": true,
+  "requiredStatusChecks": [
+    "Build and test",
+    "Integration tests",
+    "Contract Tests"
+  ],
+  "ignoreUnstable": true,
+  "stabilityDays": 3
 }

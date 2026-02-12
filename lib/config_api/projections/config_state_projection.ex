@@ -105,7 +105,9 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
     # Acknowledge events ONLY if they are RecordedEvents from a real subscription
     if are_recorded_events do
       case Map.get(state, :subscription) do
-        nil -> :ok
+        nil ->
+          :ok
+
         subscription ->
           Logger.debug("Acknowledging #{length(events)} RecordedEvents")
           ConfigApi.EventStore.ack(subscription, List.last(events))
@@ -123,7 +125,10 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
 
   @impl true
   def handle_info(msg, state) do
-    Logger.warning("ConfigStateProjection received unexpected message: #{inspect(msg, pretty: true, limit: 5)}")
+    Logger.warning(
+      "ConfigStateProjection received unexpected message: #{inspect(msg, pretty: true, limit: 5)}"
+    )
+
     {:noreply, state}
   end
 
@@ -181,9 +186,7 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
           Logger.info("Replaying #{length(events)} events from all config streams...")
 
           Enum.each(events, fn recorded_event ->
-            Logger.debug(
-              "Applying event: #{inspect(recorded_event.event_type)}"
-            )
+            Logger.debug("Applying event: #{inspect(recorded_event.event_type)}")
 
             apply_event(recorded_event.data)
           end)
@@ -202,11 +205,13 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
   defp subscribe_to_events do
     # Use persistent subscription for reliable event delivery
     # This creates a durable subscription that survives restarts
-    {:ok, subscription} = ConfigApi.EventStore.subscribe_to_all_streams(
-      "config_state_projection_subscription",
-      self(),
-      start_from: :current
-    )
+    {:ok, subscription} =
+      ConfigApi.EventStore.subscribe_to_all_streams(
+        "config_state_projection_subscription",
+        self(),
+        start_from: :current
+      )
+
     Logger.info("Created persistent subscription: #{inspect(subscription)}")
     {:ok, subscription}
   end
