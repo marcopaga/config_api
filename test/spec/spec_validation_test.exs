@@ -79,7 +79,7 @@ defmodule ConfigApi.Spec.SpecValidationTest do
 
       Enum.each(expected_schemas, fn schema_name ->
         assert Map.has_key?(spec["components"]["schemas"], schema_name),
-          "Schema #{schema_name} should be defined"
+               "Schema #{schema_name} should be defined"
       end)
     end
 
