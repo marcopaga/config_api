@@ -1,8 +1,109 @@
 # ConfigApi
 
-A production-grade configuration management API built with **CQRS (Command Query Responsibility Segregation)** and **Event Sourcing** using PostgreSQL and EventStore.
+> **A production-grade configuration management system with complete audit trail, time-travel queries, and event sourcing.**
 
-## Architecture
+[![Tests](https://img.shields.io/badge/tests-102%20passing-success)]()
+[![Elixir](https://img.shields.io/badge/elixir-1.18.4-purple)]()
+[![Erlang](https://img.shields.io/badge/erlang-28.0.2-red)]()
+[![License](https://img.shields.io/badge/license-MIT-blue)]()
+
+ConfigApi is a **CQRS/Event Sourcing** system that provides:
+- 🔍 **Complete Audit Trail** - Every change recorded as an immutable event
+- ⏰ **Time-Travel Queries** - See configuration state at any point in history
+- ⚡ **Fast Reads** - Sub-millisecond queries from in-memory projections
+- 🔒 **Durable Writes** - PostgreSQL-backed event persistence
+- 📊 **Event History** - Full change log with timestamps and metadata
+- 🏥 **Health Monitoring** - Built-in operational health checks
+
+## ✨ Key Features
+
+```mermaid
+graph LR
+    subgraph "What You Get"
+        Audit[Complete<br/>Audit Trail]
+        Time[Time-Travel<br/>Queries]
+        Fast[Fast<br/>Reads]
+        History[Event<br/>History]
+    end
+
+    Audit --> Time --> Fast --> History
+
+    style Audit fill:#c8e6c9
+    style Time fill:#fff9c4
+    style Fast fill:#e1f5ff
+    style History fill:#f3e5f5
+```
+
+### Store & Retrieve Configurations
+```bash
+# Store a value
+curl -X PUT http://localhost:4000/config/api_key \
+  -H "Content-Type: application/json" \
+  -d '{"value":"secret-key-123"}'
+
+# Retrieve it (after restart)
+curl http://localhost:4000/config/api_key
+# secret-key-123
+```
+
+### View Complete History
+```bash
+# See all changes to a configuration
+curl http://localhost:4000/config/api_key/history
+
+# Returns:
+[
+  {
+    "event_type": "ConfigValueSet",
+    "data": {"value": "secret-key-123", "timestamp": "..."},
+    "stream_version": 1
+  }
+]
+```
+
+### Time-Travel Queries
+```bash
+# What was the value yesterday?
+curl http://localhost:4000/config/api_key/at/2026-02-11T10:00:00Z
+# old-secret-key
+
+# What is it now?
+curl http://localhost:4000/config/api_key/at/2026-02-12T10:00:00Z
+# secret-key-123
+```
+
+## 🚀 Quick Start
+
+```bash
+# 1. Start PostgreSQL
+docker run -d --name config_api_postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=config_api_eventstore \
+  -p 5432:5432 postgres:15
+
+# 2. Initialize EventStore
+mix event_store.create && mix event_store.init
+
+# 3. Start the application
+iex -S mix
+
+# 4. Try it out!
+curl http://localhost:4000/health
+```
+
+**➡️ Complete setup guide:** [docs/guides/quick-start.md](docs/guides/quick-start.md)
+
+## 📚 Documentation
+
+📖 **[Complete Documentation](docs/README.md)** - Architecture, guides, and API reference
+
+### Quick Links
+- **[Architecture Overview](docs/architecture/overview.md)** - System design and diagrams
+- **[Quick Start Guide](docs/guides/quick-start.md)** - Get running in 5 minutes
+- **[CQRS Explained](docs/architecture/cqrs.md)** - Understanding the pattern
+- **[REST API Reference](docs/api/rest-api.md)** - Complete endpoint documentation
+
+## 🏗️ Architecture
 
 This application uses a complete CQRS/Event Sourcing architecture:
 
