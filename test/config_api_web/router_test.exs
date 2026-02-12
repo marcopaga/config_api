@@ -57,9 +57,9 @@ defmodule ConfigApiWeb.RouterTest do
     :ok
   end
 
-  describe "GET /config" do
+  describe "GET /v1/config" do
     test "returns empty list when no configs" do
-      conn = conn(:get, "/config")
+      conn = conn(:get, "/v1/config")
       conn = Router.call(conn, @opts)
 
       assert conn.state == :sent
@@ -73,7 +73,7 @@ defmodule ConfigApiWeb.RouterTest do
       ConfigStoreCQRS.put("key3", "value3")
       rebuild_projection()
 
-      conn = conn(:get, "/config")
+      conn = conn(:get, "/v1/config")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 200
@@ -85,9 +85,9 @@ defmodule ConfigApiWeb.RouterTest do
     end
   end
 
-  describe "GET /config/:name" do
+  describe "GET /v1/config/:name" do
     test "returns 404 for non-existent config" do
-      conn = conn(:get, "/config/nonexistent")
+      conn = conn(:get, "/v1/config/nonexistent")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 404
@@ -98,7 +98,7 @@ defmodule ConfigApiWeb.RouterTest do
       ConfigStoreCQRS.put("test_key", "test_value")
       rebuild_projection()
 
-      conn = conn(:get, "/config/test_key")
+      conn = conn(:get, "/v1/config/test_key")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 200
@@ -106,10 +106,10 @@ defmodule ConfigApiWeb.RouterTest do
     end
   end
 
-  describe "PUT /config/:name" do
+  describe "PUT /v1/config/:name" do
     test "creates a new config" do
       conn =
-        conn(:put, "/config/new_key", Jason.encode!(%{value: "new_value"}))
+        conn(:put, "/v1/config/new_key", Jason.encode!(%{value: "new_value"}))
         |> put_req_header("content-type", "application/json")
 
       conn = Router.call(conn, @opts)
@@ -127,7 +127,7 @@ defmodule ConfigApiWeb.RouterTest do
       rebuild_projection()
 
       conn =
-        conn(:put, "/config/existing", Jason.encode!(%{value: "new_value"}))
+        conn(:put, "/v1/config/existing", Jason.encode!(%{value: "new_value"}))
         |> put_req_header("content-type", "application/json")
 
       conn = Router.call(conn, @opts)
@@ -139,12 +139,12 @@ defmodule ConfigApiWeb.RouterTest do
     end
   end
 
-  describe "DELETE /config/:name" do
+  describe "DELETE /v1/config/:name" do
     test "deletes an existing config" do
       ConfigStoreCQRS.put("to_delete", "value")
       rebuild_projection()
 
-      conn = conn(:delete, "/config/to_delete")
+      conn = conn(:delete, "/v1/config/to_delete")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 200
@@ -155,7 +155,7 @@ defmodule ConfigApiWeb.RouterTest do
     end
 
     test "returns 404 for non-existent config" do
-      conn = conn(:delete, "/config/nonexistent")
+      conn = conn(:delete, "/v1/config/nonexistent")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 404
@@ -168,16 +168,16 @@ defmodule ConfigApiWeb.RouterTest do
       ConfigStoreCQRS.delete("key")
       rebuild_projection()
 
-      conn = conn(:delete, "/config/key")
+      conn = conn(:delete, "/v1/config/key")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 410
     end
   end
 
-  describe "GET /config/:name/history" do
+  describe "GET /v1/config/:name/history" do
     test "returns empty array for non-existent config" do
-      conn = conn(:get, "/config/nonexistent/history")
+      conn = conn(:get, "/v1/config/nonexistent/history")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 200
@@ -189,7 +189,7 @@ defmodule ConfigApiWeb.RouterTest do
       ConfigStoreCQRS.put("tracked", "v2")
       ConfigStoreCQRS.put("tracked", "v3")
 
-      conn = conn(:get, "/config/tracked/history")
+      conn = conn(:get, "/v1/config/tracked/history")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 200
@@ -204,7 +204,7 @@ defmodule ConfigApiWeb.RouterTest do
       ConfigStoreCQRS.put("key", "value")
       ConfigStoreCQRS.delete("key")
 
-      conn = conn(:get, "/config/key/history")
+      conn = conn(:get, "/v1/config/key/history")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 200
@@ -217,9 +217,9 @@ defmodule ConfigApiWeb.RouterTest do
     end
   end
 
-  describe "GET /config/:name/at/:timestamp" do
+  describe "GET /v1/config/:name/at/:timestamp" do
     test "returns 400 for invalid timestamp format" do
-      conn = conn(:get, "/config/key/at/invalid-timestamp")
+      conn = conn(:get, "/v1/config/key/at/invalid-timestamp")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 400
@@ -231,7 +231,7 @@ defmodule ConfigApiWeb.RouterTest do
 
       ConfigStoreCQRS.put("key", "value")
 
-      conn = conn(:get, "/config/key/at/#{past}")
+      conn = conn(:get, "/v1/config/key/at/#{past}")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 404
@@ -247,11 +247,80 @@ defmodule ConfigApiWeb.RouterTest do
       ConfigStoreCQRS.put("key", "v2")
       ConfigStoreCQRS.put("key", "v3")
 
-      conn = conn(:get, "/config/key/at/#{timestamp_after_v1}")
+      conn = conn(:get, "/v1/config/key/at/#{timestamp_after_v1}")
       conn = Router.call(conn, @opts)
 
       assert conn.status == 200
       assert conn.resp_body == "v1"
+    end
+  end
+
+  describe "GET /v1/health" do
+    test "returns health status" do
+      conn = conn(:get, "/v1/health")
+      conn = Router.call(conn, @opts)
+
+      assert conn.status in [200, 503]
+      health = Jason.decode!(conn.resp_body, keys: :atoms)
+      assert Map.has_key?(health, :status)
+      assert Map.has_key?(health, :timestamp)
+      assert Map.has_key?(health, :checks)
+    end
+  end
+
+  describe "backward compatibility (unversioned routes)" do
+    test "GET /config works (deprecated)" do
+      ConfigStoreCQRS.put("key1", "value1")
+      rebuild_projection()
+
+      conn = conn(:get, "/config")
+      conn = Router.call(conn, @opts)
+
+      assert conn.status == 200
+      configs = Jason.decode!(conn.resp_body, keys: :atoms)
+      assert length(configs) == 1
+    end
+
+    test "GET /config/:name works (deprecated)" do
+      ConfigStoreCQRS.put("test_key", "test_value")
+      rebuild_projection()
+
+      conn = conn(:get, "/config/test_key")
+      conn = Router.call(conn, @opts)
+
+      assert conn.status == 200
+      assert conn.resp_body == "test_value"
+    end
+
+    test "PUT /config/:name works (deprecated)" do
+      conn =
+        conn(:put, "/config/new_key", Jason.encode!(%{value: "new_value"}))
+        |> put_req_header("content-type", "application/json")
+
+      conn = Router.call(conn, @opts)
+
+      assert conn.status == 200
+      assert conn.resp_body == "OK"
+    end
+
+    test "DELETE /config/:name works (deprecated)" do
+      ConfigStoreCQRS.put("to_delete", "value")
+      rebuild_projection()
+
+      conn = conn(:delete, "/config/to_delete")
+      conn = Router.call(conn, @opts)
+
+      assert conn.status == 200
+      assert conn.resp_body == "OK"
+    end
+
+    test "GET /health works (deprecated)" do
+      conn = conn(:get, "/health")
+      conn = Router.call(conn, @opts)
+
+      assert conn.status in [200, 503]
+      health = Jason.decode!(conn.resp_body, keys: :atoms)
+      assert Map.has_key?(health, :status)
     end
   end
 

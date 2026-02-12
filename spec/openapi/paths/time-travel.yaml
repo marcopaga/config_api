@@ -1,0 +1,92 @@
+get:
+  summary: Get configuration value at timestamp (time-travel query)
+  description: |
+    Retrieve the configuration value as it existed at a specific point in time.
+
+    **CQRS Pattern**: Query operation (Event Sourcing time-travel)
+
+    **Data source**: EventStore (PostgreSQL) - events are replayed up to timestamp
+
+    **How it works**:
+    1. Load all events for the configuration from EventStore
+    2. Replay events in order up to and including the specified timestamp
+    3. Return the resulting value
+
+    **Timestamp behavior**:
+    - Events with `timestamp <= query_timestamp` are included
+    - Events with `timestamp > query_timestamp` are excluded
+    - Uses event's `data.timestamp` field (not `created_at`)
+
+    **Response format**: Plain text (not JSON)
+
+    **Response codes**:
+    - `200`: Configuration existed at timestamp, value returned
+    - `400`: Invalid timestamp format
+    - `404`: Configuration did not exist at timestamp (or was deleted before timestamp)
+
+    **Use cases**:
+    - Debugging: "What was the value at the time of the incident?"
+    - Compliance: "What was the configuration at end of quarter?"
+    - Analysis: "How has this configuration changed over time?"
+    - Auditing: "What value did the user see at this timestamp?"
+
+    **Example timeline**:
+    ```
+    10:00 - SET to "value1"
+    11:00 - SET to "value2"
+    12:00 - DELETE
+    13:00 - SET to "value3"
+
+    Query at 10:30 -> "value1"
+    Query at 11:30 -> "value2"
+    Query at 12:30 -> 404 (deleted)
+    Query at 13:30 -> "value3"
+    ```
+  operationId: getConfigurationAtTimestamp
+  tags:
+    - Time-Travel
+  parameters:
+    - $ref: '../parameters/path.yaml#/ConfigName'
+    - $ref: '../parameters/path.yaml#/Timestamp'
+  responses:
+    '200':
+      description: Configuration value at the specified timestamp
+      content:
+        text/plain:
+          schema:
+            type: string
+          examples:
+            value_exists:
+              summary: Configuration existed at timestamp
+              value: "production"
+            after_update:
+              summary: Configuration after update
+              value: "staging"
+    '400':
+      description: Invalid timestamp format
+      content:
+        text/plain:
+          schema:
+            $ref: '../schemas/errors.yaml#/BadRequestError'
+          examples:
+            invalid_format:
+              summary: Malformed timestamp
+              value: "Invalid timestamp format. Must be ISO8601."
+    '404':
+      description: Configuration did not exist at timestamp (or was deleted)
+      content:
+        text/plain:
+          schema:
+            $ref: '../schemas/errors.yaml#/NotFoundError'
+          examples:
+            never_existed:
+              summary: No events before timestamp
+              value: "Configuration 'api_key' not found at 2024-01-15T10:30:00Z"
+            was_deleted:
+              summary: Was deleted before timestamp
+              value: "Configuration 'api_key' not found at 2024-01-15T12:30:00Z"
+  x-cqrs-pattern: query
+  x-read-from: EventStore (PostgreSQL)
+  x-event-sourcing: true
+  x-event-replay: true
+  x-time-travel: true

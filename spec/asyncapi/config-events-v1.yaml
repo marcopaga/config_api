@@ -1,0 +1,283 @@
+asyncapi: 3.0.0
+
+info:
+  title: ConfigApi Event Streams
+  version: 1.0.0
+  description: |
+    # ConfigApi Event Streaming Specification
+
+    This AsyncAPI specification documents the event streams produced by ConfigApi's
+    CQRS/Event Sourcing architecture.
+
+    ## Architecture
+
+    **Event Store**: PostgreSQL-backed EventStore library
+    **Event Streams**: One stream per configuration (`config-{name}`)
+    **Event Types**: ConfigValueSet, ConfigValueDeleted
+    **Consumers**: ConfigStateProjection (in-memory read model)
+
+    ## Event Flow
+
+    ```
+    Command → Aggregate → Event → EventStore → Projection
+    ```
+
+    1. **Command** received (PUT /v1/config/{name} or DELETE)
+    2. **Aggregate** validates and generates event
+    3. **Event** persisted to EventStore (PostgreSQL)
+    4. **Projection** updated synchronously (immediate consistency)
+
+    ## Consistency Model
+
+    - **Projection Updates**: Synchronous (immediate consistency)
+    - **Event Subscriptions**: Currently disabled (projection rebuilds from events on startup)
+    - **Eventual Consistency**: Not applicable (synchronous updates)
+
+    ## Stream Naming
+
+    Each configuration has its own event stream:
+    - Stream ID: `config-{config_name}`
+    - Examples: `config-api_key`, `config-database_url`, `config-feature_flag_enabled`
+
+  contact:
+    name: ConfigApi Support
+    url: https://github.com/anthropics/config_api
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  eventstore:
+    host: localhost:5432
+    protocol: postgresql
+    description: EventStore PostgreSQL database
+    bindings:
+      postgresql:
+        database: config_api_eventstore
+        schema: public
+    tags:
+      - name: production
+        description: Production EventStore
+
+channels:
+  configStream:
+    address: 'config-{name}'
+    description: |
+      Event stream for a specific configuration.
+
+      **Stream Lifecycle**:
+      - Created on first event for a configuration
+      - Persists indefinitely (events are never deleted)
+      - Supports event replay from beginning
+
+      **Stream Version**: Monotonically increasing integer (1, 2, 3...)
+
+      **Concurrency**: Optimistic concurrency control via stream version
+    parameters:
+      name:
+        description: Configuration name (aggregate ID)
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          examples:
+            - api_key
+            - database_url
+            - feature_flag_enabled
+    messages:
+      ConfigValueSet:
+        $ref: '#/components/messages/ConfigValueSet'
+      ConfigValueDeleted:
+        $ref: '#/components/messages/ConfigValueDeleted'
+
+operations:
+  publishConfigEvent:
+    action: send
+    channel:
+      $ref: '#/channels/configStream'
+    summary: Publish configuration event
+    description: |
+      Published when a configuration command is executed.
+
+      **Triggered by**:
+      - PUT /v1/config/{name} → ConfigValueSet
+      - DELETE /v1/config/{name} → ConfigValueDeleted
+
+      **Flow**:
+      1. Command validated by ConfigValue aggregate
+      2. Event generated with current timestamp
+      3. Event persisted to EventStore
+      4. Event returned to caller (synchronous)
+    messages:
+      - $ref: '#/components/messages/ConfigValueSet'
+      - $ref: '#/components/messages/ConfigValueDeleted'
+
+  subscribeConfigEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/configStream'
+    summary: Subscribe to configuration events
+    description: |
+      Subscribe to events for a specific configuration stream.
+
+      **Current Implementation**: Subscriptions are disabled.
+      Projection rebuilds from events on startup instead of subscribing.
+
+      **Future**: May enable subscriptions for real-time projection updates.
+
+      **Use Cases**:
+      - Real-time projection updates (currently synchronous)
+      - Audit log consumers
+      - External system integrations
+      - Analytics and monitoring
+    messages:
+      - $ref: '#/components/messages/ConfigValueSet'
+      - $ref: '#/components/messages/ConfigValueDeleted'
+
+components:
+  messages:
+    ConfigValueSet:
+      name: ConfigValueSet
+      title: Configuration Value Set Event
+      summary: Emitted when a configuration value is set or updated
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ConfigValueSetPayload'
+      examples:
+        - name: firstSet
+          summary: First time setting a value
+          payload:
+            config_name: api_key
+            value: secret123
+            old_value: null
+            timestamp: '2024-01-15T10:30:00.123456Z'
+        - name: update
+          summary: Updating existing value
+          payload:
+            config_name: api_key
+            value: secret456
+            old_value: secret123
+            timestamp: '2024-01-15T11:00:00.123456Z'
+        - name: resurrection
+          summary: Setting value after deletion
+          payload:
+            config_name: api_key
+            value: secret789
+            old_value: null
+            timestamp: '2024-01-15T12:00:00.123456Z'
+      bindings:
+        eventstore:
+          eventType: Elixir.ConfigApi.Events.ConfigValueSet
+      x-elixir-module: ConfigApi.Events.ConfigValueSet
+      x-aggregate: ConfigValue
+      x-cqrs-pattern: event
+
+    ConfigValueDeleted:
+      name: ConfigValueDeleted
+      title: Configuration Deleted Event
+      summary: Emitted when a configuration is deleted
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ConfigValueDeletedPayload'
+      examples:
+        - name: deletion
+          summary: Deleting a configuration
+          payload:
+            config_name: api_key
+            deleted_value: secret456
+            timestamp: '2024-01-15T13:00:00.123456Z'
+      bindings:
+        eventstore:
+          eventType: Elixir.ConfigApi.Events.ConfigValueDeleted
+      x-elixir-module: ConfigApi.Events.ConfigValueDeleted
+      x-aggregate: ConfigValue
+      x-cqrs-pattern: event
+      x-creates-tombstone: true
+
+  schemas:
+    ConfigValueSetPayload:
+      type: object
+      description: Payload for ConfigValueSet event
+      required:
+        - config_name
+        - value
+        - timestamp
+      properties:
+        config_name:
+          type: string
+          description: Configuration name (aggregate ID)
+          pattern: '^[a-zA-Z0-9_-]+$'
+          examples:
+            - api_key
+            - database_url
+        value:
+          type: string
+          description: New value being set
+          examples:
+            - production
+            - https://api.example.com
+            - ''
+        old_value:
+          type:
+            - string
+            - 'null'
+          description: Previous value (null if first set or resurrection)
+          examples:
+            - null
+            - staging
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred (ISO8601)
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$'
+          examples:
+            - '2024-01-15T10:30:00.123456Z'
+
+    ConfigValueDeletedPayload:
+      type: object
+      description: Payload for ConfigValueDeleted event
+      required:
+        - config_name
+        - deleted_value
+        - timestamp
+      properties:
+        config_name:
+          type: string
+          description: Configuration name (aggregate ID)
+          pattern: '^[a-zA-Z0-9_-]+$'
+          examples:
+            - api_key
+            - database_url
+        deleted_value:
+          type: string
+          description: Value that was deleted (preserved for audit)
+          examples:
+            - secret123
+            - ''
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred (ISO8601)
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$'
+          examples:
+            - '2024-01-15T13:00:00.123456Z'
+
+x-event-sourcing:
+  store: EventStore (PostgreSQL)
+  library: eventstore v1.4.8
+  stream-naming: 'config-{config_name}'
+  versioning: monotonically-increasing
+  concurrency: optimistic-locking
+  retention: permanent (events never deleted)
+
+x-cqrs-architecture:
+  write-path:
+    - Command received
+    - Aggregate validates
+    - Event generated
+    - Event persisted to EventStore
+    - Projection updated synchronously
+  read-path:
+    - Query projection (ETS)
+    - Or query EventStore for history
+  consistency: immediate (synchronous projection updates)
+  subscriptions: disabled (projection rebuilds from events)

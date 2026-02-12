@@ -1,0 +1,150 @@
+ConfigListItem:
+  type: object
+  description: A configuration key-value pair in the list response
+  required:
+    - name
+    - value
+  properties:
+    name:
+      type: string
+      description: The configuration name (unique identifier)
+      examples:
+        - "api_key"
+        - "database_url"
+        - "feature_flag_enabled"
+    value:
+      type: string
+      description: The current configuration value
+      examples:
+        - "secret123"
+        - "postgresql://localhost/mydb"
+        - "true"
+  x-cqrs-pattern: query
+  x-read-from: ConfigStateProjection (ETS)
+  x-consistency: immediate
+  example:
+    name: "api_key"
+    value: "secret123"
+
+EventHistoryItem:
+  type: object
+  description: A single event from the event store history
+  required:
+    - event_type
+    - data
+    - metadata
+    - created_at
+    - stream_version
+  properties:
+    event_type:
+      type: string
+      description: The type of event
+      enum:
+        - "Elixir.ConfigApi.Events.ConfigValueSet"
+        - "Elixir.ConfigApi.Events.ConfigValueDeleted"
+      examples:
+        - "Elixir.ConfigApi.Events.ConfigValueSet"
+    data:
+      oneOf:
+        - $ref: '#/ConfigValueSetData'
+        - $ref: '#/ConfigValueDeletedData'
+      description: The event data (polymorphic based on event_type)
+    metadata:
+      type: object
+      description: Event metadata (currently empty but available for future use)
+      additionalProperties: true
+      example: {}
+    created_at:
+      type: string
+      format: date-time
+      description: Timestamp when the event was created (ISO8601 format)
+      examples:
+        - "2024-01-15T10:30:00.123456Z"
+    stream_version:
+      type: integer
+      description: Version number of this event in the stream (monotonically increasing)
+      minimum: 1
+      examples:
+        - 1
+        - 2
+        - 10
+  x-cqrs-pattern: query
+  x-read-from: EventStore (PostgreSQL)
+  x-audit-trail: true
+  example:
+    event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+    data:
+      config_name: "api_key"
+      value: "secret123"
+      old_value: null
+      timestamp: "2024-01-15T10:30:00.123456Z"
+    metadata: {}
+    created_at: "2024-01-15T10:30:00.123456Z"
+    stream_version: 1
+
+ConfigValueSetData:
+  type: object
+  description: Event data for ConfigValueSet events
+  required:
+    - config_name
+    - value
+    - timestamp
+  properties:
+    config_name:
+      type: string
+      description: The configuration name
+      examples:
+        - "api_key"
+    value:
+      type: string
+      description: The new value that was set
+      examples:
+        - "secret123"
+    old_value:
+      type: [string, "null"]
+      description: The previous value (null if this is the first set)
+      examples:
+        - null
+        - "old_secret"
+    timestamp:
+      type: string
+      format: date-time
+      description: When the value was set
+      examples:
+        - "2024-01-15T10:30:00.123456Z"
+  x-elixir-module: ConfigApi.Events.ConfigValueSet
+  example:
+    config_name: "api_key"
+    value: "secret123"
+    old_value: null
+    timestamp: "2024-01-15T10:30:00.123456Z"
+
+ConfigValueDeletedData:
+  type: object
+  description: Event data for ConfigValueDeleted events
+  required:
+    - config_name
+    - deleted_value
+    - timestamp
+  properties:
+    config_name:
+      type: string
+      description: The configuration name
+      examples:
+        - "api_key"
+    deleted_value:
+      type: string
+      description: The value that was deleted (preserved for audit trail)
+      examples:
+        - "secret123"
+    timestamp:
+      type: string
+      format: date-time
+      description: When the value was deleted
+      examples:
+        - "2024-01-15T10:35:00.123456Z"
+  x-elixir-module: ConfigApi.Events.ConfigValueDeleted
+  example:
+    config_name: "api_key"
+    deleted_value: "secret123"
+    timestamp: "2024-01-15T10:35:00.123456Z"

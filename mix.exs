@@ -32,7 +32,10 @@ defmodule ConfigApi.MixProject do
       {:memento, "~> 0.5.0"},
       # EventStore dependencies for CQRS migration
       {:eventstore, "~> 1.4.8"},
-      {:postgrex, "~> 0.21.1"}
+      {:postgrex, "~> 0.21.1"},
+      # Schema validation for OpenAPI contract tests
+      {:ex_json_schema, "~> 0.10", only: [:test]},
+      {:yaml_elixir, "~> 2.11", only: [:dev, :test]}
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
     ]

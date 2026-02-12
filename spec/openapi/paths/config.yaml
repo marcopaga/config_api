@@ -1,0 +1,59 @@
+get:
+  summary: List all configurations
+  description: |
+    Retrieve all configuration key-value pairs.
+
+    **CQRS Pattern**: Query operation (read path)
+
+    **Data source**: ConfigStateProjection (in-memory ETS table)
+
+    **Performance**: Sub-millisecond response time (in-memory read)
+
+    **Consistency**: Immediate - reflects all committed writes
+
+    **Response**:
+    - Returns an array of configuration items
+    - Each item contains `name` and `value`
+    - Empty array if no configurations exist
+    - Does not include deleted configurations (tombstones filtered out)
+
+    **Use cases**:
+    - Dashboard displaying all current configurations
+    - Bulk configuration export
+    - Configuration diff tools
+  operationId: listConfigurations
+  tags:
+    - Configuration
+  responses:
+    '200':
+      description: List of all configurations (may be empty array)
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '../schemas/responses.yaml#/ConfigListItem'
+          examples:
+            empty:
+              summary: No configurations exist
+              value: []
+            single:
+              summary: Single configuration
+              value:
+                - name: "api_key"
+                  value: "secret123"
+            multiple:
+              summary: Multiple configurations
+              value:
+                - name: "api_key"
+                  value: "secret123"
+                - name: "database_url"
+                  value: "postgresql://localhost/mydb"
+                - name: "feature_flag_enabled"
+                  value: "true"
+                - name: "max_connections"
+                  value: "100"
+  x-cqrs-pattern: query
+  x-read-from: ConfigStateProjection (ETS)
+  x-consistency: immediate
+  x-performance: sub-millisecond

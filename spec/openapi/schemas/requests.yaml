@@ -1,0 +1,30 @@
+SetConfigRequest:
+  type: object
+  description: Request body for setting a configuration value (CQRS command)
+  required:
+    - value
+  properties:
+    value:
+      type: string
+      description: |
+        The configuration value to set. Can be any string including empty string.
+        Values are stored as-is without transformation.
+      minLength: 0
+      maxLength: 1000000
+      examples:
+        - "production"
+        - "https://api.example.com"
+        - ""
+        - "42"
+        - '{"nested": "json"}'
+        - "Unicode: 你好世界 🚀"
+  x-cqrs-pattern: command
+  x-aggregate: ConfigValue
+  x-generates-event: ConfigValueSet
+  x-validation:
+    - Business rules enforced by ConfigValue aggregate
+    - Allows setting same value multiple times (idempotent)
+    - Allows resurrection of deleted configurations
+    - Empty strings are valid values
+  example:
+    value: "production"
