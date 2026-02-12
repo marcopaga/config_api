@@ -274,7 +274,8 @@ fi
 ###############################################################################
 
 print_test "Time-travel query (current timestamp)"
-current_timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Use a timestamp slightly in the future to ensure we get the latest state
+current_timestamp=$(date -u -d '+1 minute' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v+1M +"%Y-%m-%dT%H:%M:%SZ")
 timetravel_response=$(http_request "GET" "/config/$TEST_CONFIG_NAME/at/$current_timestamp" "" "200")
 
 if [ "$timetravel_response" = "$TEST_VALUE_2" ]; then

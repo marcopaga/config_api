@@ -86,16 +86,6 @@ jobs:
         EVENTSTORE_USERNAME: postgres
         EVENTSTORE_PASSWORD: postgres
 
-    - name: Generate test coverage report
-      run: mix test --cover
-      env:
-        MIX_ENV: test
-        EVENTSTORE_HOST: localhost
-        EVENTSTORE_PORT: 5432
-        EVENTSTORE_DATABASE: config_api_eventstore
-        EVENTSTORE_USERNAME: postgres
-        EVENTSTORE_PASSWORD: postgres
-
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
