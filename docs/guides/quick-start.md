@@ -92,15 +92,11 @@ curl -X PUT http://localhost:4000/config/welcome \
   -d '{"value":"Hello ConfigApi!"}'
 # OK
 
-# View the event history (immediate)
+# View the event history
 curl http://localhost:4000/config/welcome/history
 # [{"event_type":"Elixir.ConfigApi.Events.ConfigValueSet",...}]
 
-# Restart the app to see the value in queries
-# Press Ctrl+C twice in the iex shell, then restart:
-iex -S mix
-
-# Get the configuration (after restart)
+# Get the configuration (immediately available!)
 curl http://localhost:4000/config/welcome
 # Hello ConfigApi!
 
@@ -212,7 +208,7 @@ curl -X PUT http://localhost:4000/config/database_url \
 ### Get Configuration
 
 ```bash
-# After restart
+# Immediately available
 curl http://localhost:4000/config/database_url
 # postgres://localhost/mydb
 ```
@@ -240,9 +236,9 @@ mix test
 # 1 doctest, 102 tests, 0 failures ✅
 ```
 
-## 🔄 Understanding Restart-Based Consistency
+## 🔄 Understanding Immediate Consistency
 
-**Important:** This system uses restart-based consistency:
+**How it works:** Writes are immediately visible in reads!
 
 ```mermaid
 sequenceDiagram
@@ -254,42 +250,29 @@ sequenceDiagram
     You->>App: PUT /config/key
     App->>EventStore: Store event
     EventStore-->>App: Event stored ✅
+    App->>Projection: Update immediately
+    Projection-->>App: Updated ✅
     App-->>You: 200 OK
 
-    Note over You,Projection: Event is durable but<br/>projection not updated yet
-
-    You->>App: GET /config/key
-    App->>Projection: Query
-    Projection-->>App: Not found
-    App-->>You: 404 Not Found
-
-    Note over App: --- RESTART ---
-
-    App->>EventStore: Read all events
-    EventStore-->>Projection: Replay events
-    Projection->>Projection: Rebuild state
+    Note over You,Projection: Event stored AND<br/>projection updated
 
     You->>App: GET /config/key
     App->>Projection: Query
     Projection-->>App: Found!
-    App-->>You: 200 "value"
+    App-->>You: 200 "value" ✅
 ```
 
-**Implications:**
-- Writes succeed immediately (durable in PostgreSQL)
-- Reads reflect state at last restart
-- Use `/config/:name/history` for immediate verification
-- Restart after critical updates
+**Benefits:**
+- ✅ Writes immediately visible in reads
+- ✅ No restart required
+- ✅ Event sourcing fully preserved
+- ✅ Complete audit trail available
+- ✅ Time-travel queries work
 
-**Workarounds:**
+**Event History:**
 ```bash
-# 1. Use event history endpoint (no restart needed)
+# View complete change history
 curl http://localhost:4000/config/key/history
-
-# 2. Restart the application
-# In iex: Ctrl+C twice, then: iex -S mix
-
-# 3. For production: systemctl restart config_api
 ```
 
 ## 📚 Next Steps

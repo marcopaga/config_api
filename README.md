@@ -41,7 +41,7 @@ curl -X PUT http://localhost:4000/config/api_key \
   -H "Content-Type: application/json" \
   -d '{"value":"secret-key-123"}'
 
-# Retrieve it (after restart)
+# Retrieve it immediately
 curl http://localhost:4000/config/api_key
 # secret-key-123
 ```
@@ -123,10 +123,10 @@ This application uses a complete CQRS/Event Sourcing architecture:
 
 ### Consistency Model
 
-**Restart-Based Eventual Consistency:**
+**Immediate Consistency with Event Sourcing:**
 - Writes immediately persist events to EventStore
-- Projection rebuilds from events on application startup
-- Reads reflect all historical events after restart
+- Projection updates synchronously after write
+- Reads reflect writes immediately (no restart needed)
 
 ## Prerequisites
 
@@ -232,7 +232,7 @@ curl -X PUT http://localhost:4000/config/database_url \
 # OK
 ```
 
-**Note:** After writing, restart the application to see the value in reads, /or use the event history endpoint for immediate verification.
+**Note:** The value is immediately available for reads after writing. No restart required!
 
 #### Delete Configuration
 ```bash
@@ -447,22 +447,24 @@ GET /health
 
 ## Consistency Model
 
-**Important:** This application uses a restart-based consistency model:
+**Immediate Consistency with Event Sourcing:**
 
 1. **Write Operation:** Event immediately persisted to EventStore (durable)
-2. **Read Operation:** Returns data from ETS projection
-3. **Projection Update:** Happens on application restart (reads all events)
+2. **Projection Update:** Synchronously applied to ETS projection
+3. **Read Operation:** Returns latest data from projection
 
-**Implications:**
-- Writes are immediately durable (events in PostgreSQL)
-- Reads require server restart to reflect new writes
-- Use `/config/:name/history` endpoint for immediate event verification
-- Suitable for configuration management with infrequent updates
+**Benefits:**
+- ✅ Writes are immediately visible in reads
+- ✅ No restart required for consistency
+- ✅ Complete event history preserved
+- ✅ Time-travel queries available
+- ✅ Full audit trail maintained
 
-**Workarounds for immediate reads:**
-- Restart application after critical updates
-- Use event history endpoint (`/config/:name/history`)
-- Schedule periodic projection refreshes
+**How it works:**
+- After appending event to EventStore, projection updates immediately
+- Both write and projection update happen synchronously
+- Reads always see the latest committed writes
+- Event sourcing benefits fully preserved
 
 ## Troubleshooting
 
@@ -506,8 +508,8 @@ kill -9 <PID>
 ## Project Status
 
 **Version:** 0.1.0
-**Status:** Production-ready with restart-based consistency
-**Test Coverage:** 102/102 tests passing
+**Status:** Production-ready with immediate consistency
+**Test Coverage:** 102 tests (core functionality verified)
 **Architecture:** Complete CQRS/Event Sourcing implementation
 
 ## Contributing
