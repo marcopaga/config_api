@@ -90,20 +90,26 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
   def handle_info({:events, events}, state) do
     Logger.info("Received #{length(events)} events from subscription")
 
+    # Check if these are RecordedEvents (from real subscription) or raw events (from tests/immediate updates)
+    are_recorded_events = events != [] and is_struct(List.first(events), EventStore.RecordedEvent)
+
     # Process each event
-    # Persistent subscriptions send RecordedEvent structs
     Enum.each(events, fn event ->
       # If it's a RecordedEvent (from subscription or rebuild), extract .data
       # If it's already an event struct, use it directly
-      event_data = if Map.has_key?(event, :data), do: event.data, else: event
+      event_data = if are_recorded_events, do: event.data, else: event
       Logger.debug("Processing event: #{inspect(event_data.__struct__)}")
       apply_event(event_data)
     end)
 
-    # Acknowledge events for persistent subscription
-    if subscription = Map.get(state, :subscription) do
-      Logger.debug("Acknowledging #{length(events)} events")
-      ConfigApi.EventStore.ack(subscription, events)
+    # Acknowledge events ONLY if they are RecordedEvents from a real subscription
+    if are_recorded_events do
+      case Map.get(state, :subscription) do
+        nil -> :ok
+        subscription ->
+          Logger.debug("Acknowledging #{length(events)} RecordedEvents")
+          ConfigApi.EventStore.ack(subscription, List.last(events))
+      end
     end
 
     {:noreply, state}
