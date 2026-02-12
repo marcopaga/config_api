@@ -50,11 +50,10 @@ servers:
   eventstore:
     host: localhost:5432
     protocol: postgresql
-    description: EventStore PostgreSQL database
-    bindings:
-      postgresql:
-        database: config_api_eventstore
-        schema: public
+    description: |
+      EventStore PostgreSQL database.
+      Database: config_api_eventstore
+      Schema: public
     tags:
       - name: production
         description: Production EventStore
@@ -76,13 +75,7 @@ channels:
     parameters:
       name:
         description: Configuration name (aggregate ID)
-        schema:
-          type: string
-          pattern: '^[a-zA-Z0-9_-]+$'
-          examples:
-            - api_key
-            - database_url
-            - feature_flag_enabled
+        location: '$message.payload#/config_name'
     messages:
       ConfigValueSet:
         $ref: '#/components/messages/ConfigValueSet'
@@ -108,8 +101,8 @@ operations:
       3. Event persisted to EventStore
       4. Event returned to caller (synchronous)
     messages:
-      - $ref: '#/components/messages/ConfigValueSet'
-      - $ref: '#/components/messages/ConfigValueDeleted'
+      - $ref: '#/channels/configStream/messages/ConfigValueSet'
+      - $ref: '#/channels/configStream/messages/ConfigValueDeleted'
 
   subscribeConfigEvents:
     action: receive
@@ -130,8 +123,8 @@ operations:
       - External system integrations
       - Analytics and monitoring
     messages:
-      - $ref: '#/components/messages/ConfigValueSet'
-      - $ref: '#/components/messages/ConfigValueDeleted'
+      - $ref: '#/channels/configStream/messages/ConfigValueSet'
+      - $ref: '#/channels/configStream/messages/ConfigValueDeleted'
 
 components:
   messages:
@@ -164,12 +157,10 @@ components:
             value: secret789
             old_value: null
             timestamp: '2024-01-15T12:00:00.123456Z'
-      bindings:
-        eventstore:
-          eventType: Elixir.ConfigApi.Events.ConfigValueSet
       x-elixir-module: ConfigApi.Events.ConfigValueSet
       x-aggregate: ConfigValue
       x-cqrs-pattern: event
+      x-eventstore-type: Elixir.ConfigApi.Events.ConfigValueSet
 
     ConfigValueDeleted:
       name: ConfigValueDeleted
@@ -185,12 +176,10 @@ components:
             config_name: api_key
             deleted_value: secret456
             timestamp: '2024-01-15T13:00:00.123456Z'
-      bindings:
-        eventstore:
-          eventType: Elixir.ConfigApi.Events.ConfigValueDeleted
       x-elixir-module: ConfigApi.Events.ConfigValueDeleted
       x-aggregate: ConfigValue
       x-cqrs-pattern: event
+      x-eventstore-type: Elixir.ConfigApi.Events.ConfigValueDeleted
       x-creates-tombstone: true
 
   schemas:

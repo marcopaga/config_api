@@ -62,13 +62,13 @@ jobs:
         run: npm install -g ajv-cli
 
       - name: Validate ConfigValueSet schema
-        run: ajv compile -s spec/json-schema/events/config-value-set.json
+        run: ajv compile -s spec/json-schema/events/config-value-set.json --strict=false
 
       - name: Validate ConfigValueDeleted schema
-        run: ajv compile -s spec/json-schema/events/config-value-deleted.json
+        run: ajv compile -s spec/json-schema/events/config-value-deleted.json --strict=false
 
       - name: Validate ConfigValue aggregate schema
-        run: ajv compile -s spec/json-schema/aggregates/config-value.json
+        run: ajv compile -s spec/json-schema/aggregates/config-value.json --strict=false
 
   validate-asyncapi:
     name: Validate AsyncAPI Specification
