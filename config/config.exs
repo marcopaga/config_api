@@ -1,12 +1,7 @@
 import Config
 
 config :mnesia,
-<<<<<<< HEAD
   dir: ".mnesia/#{Mix.env()}/#{node()}"
-||||||| 2ce121d
-=======
-  dir: ".mnesia/#{Mix.env}/#{node()}"
->>>>>>> origin/main
 
 # Register EventStore with the application
 config :config_api,
