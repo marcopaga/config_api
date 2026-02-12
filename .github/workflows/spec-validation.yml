@@ -1,0 +1,189 @@
+name: Specification Validation
+
+on:
+  push:
+    branches: [ main, feature/*, develop ]
+    paths:
+      - 'spec/**'
+      - 'lib/**'
+      - 'test/spec/**'
+      - '.github/workflows/spec-validation.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'spec/**'
+      - 'lib/**'
+      - 'test/spec/**'
+
+jobs:
+  validate-openapi:
+    name: Validate OpenAPI Specification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Redocly CLI
+        run: npm install -g @redocly/cli
+
+      - name: Validate OpenAPI spec
+        run: npx @redocly/cli lint spec/openapi/configapi-v1.yaml
+
+      - name: Generate documentation
+        run: npx @redocly/cli build-docs spec/openapi/configapi-v1.yaml -o docs/api-reference.html
+
+      - name: Upload API documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-documentation
+          path: docs/api-reference.html
+          retention-days: 30
+
+  validate-json-schema:
+    name: Validate JSON Schemas
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install AJV CLI (JSON Schema validator)
+        run: npm install -g ajv-cli
+
+      - name: Validate ConfigValueSet schema
+        run: ajv compile -s spec/json-schema/events/config-value-set.json --strict=false
+
+      - name: Validate ConfigValueDeleted schema
+        run: ajv compile -s spec/json-schema/events/config-value-deleted.json --strict=false
+
+      - name: Validate ConfigValue aggregate schema
+        run: ajv compile -s spec/json-schema/aggregates/config-value.json --strict=false
+
+  validate-asyncapi:
+    name: Validate AsyncAPI Specification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install AsyncAPI CLI
+        run: npm install -g @asyncapi/cli
+
+      - name: Validate AsyncAPI spec
+        run: asyncapi validate spec/asyncapi/config-events-v1.yaml
+
+  contract-tests:
+    name: Run Contract Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: config_api_eventstore
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '28.0.2'
+          elixir-version: '1.18.4'
+
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Initialize EventStore
+        run: |
+          mix event_store.create
+          mix event_store.init
+        env:
+          MIX_ENV: test
+          EVENTSTORE_HOST: localhost
+          EVENTSTORE_PORT: 5432
+          EVENTSTORE_DATABASE: config_api_eventstore
+          EVENTSTORE_USERNAME: postgres
+          EVENTSTORE_PASSWORD: postgres
+
+      - name: Run contract tests
+        run: mix test test/spec/
+        env:
+          MIX_ENV: test
+          EVENTSTORE_HOST: localhost
+          EVENTSTORE_PORT: 5432
+          EVENTSTORE_DATABASE: config_api_eventstore
+          EVENTSTORE_USERNAME: postgres
+          EVENTSTORE_PASSWORD: postgres
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-test-results
+          path: _build/test/lib/config_api/
+          retention-days: 7
+
+  specification-report:
+    name: Generate Specification Report
+    runs-on: ubuntu-latest
+    needs: [validate-openapi, validate-json-schema, validate-asyncapi, contract-tests]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create specification summary
+        run: |
+          echo "# Specification Validation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Files Validated" >> $GITHUB_STEP_SUMMARY
+          echo "- OpenAPI 3.1: \`spec/openapi/configapi-v1.yaml\`" >> $GITHUB_STEP_SUMMARY
+          echo "- JSON Schemas: 3 files in \`spec/json-schema/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- AsyncAPI 3.0: \`spec/asyncapi/config-events-v1.yaml\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Validation Status" >> $GITHUB_STEP_SUMMARY
+          echo "- OpenAPI: ${{ needs.validate-openapi.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- JSON Schema: ${{ needs.validate-json-schema.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- AsyncAPI: ${{ needs.validate-asyncapi.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Contract Tests: ${{ needs.contract-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Specification Files" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          find spec -type f | sort >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

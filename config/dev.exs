@@ -1,6 +1,6 @@
 import Config
 
-# Configure EventStore for development
+# Development-specific EventStore config
 config :config_api, ConfigApi.EventStore,
   serializer: EventStore.JsonSerializer,
   username: "postgres",
@@ -8,8 +8,7 @@ config :config_api, ConfigApi.EventStore,
   database: "config_api_eventstore",
   hostname: "localhost",
   port: 5432,
-  pool_size: 10,
-  pool_overflow: 5
+  pool_size: 10
 
-# Enable debug logging in development
-config :logger, level: :debug
+# Keep logger level
+config :logger, level: :info

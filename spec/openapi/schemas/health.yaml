@@ -1,0 +1,71 @@
+HealthResponse:
+  type: object
+  description: Health check response with overall status and individual checks
+  required:
+    - status
+    - timestamp
+    - checks
+  properties:
+    status:
+      type: string
+      description: Overall health status
+      enum:
+        - "healthy"
+        - "unhealthy"
+      examples:
+        - "healthy"
+    timestamp:
+      type: string
+      format: date-time
+      description: When the health check was performed (ISO8601 format)
+      examples:
+        - "2024-01-15T10:30:00.123456Z"
+    checks:
+      type: object
+      description: Individual health check results
+      required:
+        - projection
+        - event_store
+      properties:
+        projection:
+          $ref: '#/HealthCheck'
+        event_store:
+          $ref: '#/HealthCheck'
+      additionalProperties: false
+  example:
+    status: "healthy"
+    timestamp: "2024-01-15T10:30:00.123456Z"
+    checks:
+      projection:
+        status: "ok"
+        message: "Projection is running"
+      event_store:
+        status: "ok"
+        message: "EventStore connection active"
+
+HealthCheck:
+  type: object
+  description: Individual health check result
+  required:
+    - status
+  properties:
+    status:
+      type: string
+      description: Status of this specific check
+      enum:
+        - "ok"
+        - "error"
+      examples:
+        - "ok"
+        - "error"
+    message:
+      type: string
+      description: Human-readable status message
+      examples:
+        - "Projection is running"
+        - "EventStore connection active"
+        - "Projection not started"
+        - "EventStore connection failed"
+  example:
+    status: "ok"
+    message: "Projection is running"

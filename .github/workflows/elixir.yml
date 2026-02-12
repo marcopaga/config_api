@@ -1,3 +1,8 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
 name: Elixir CI
 
 on:
@@ -11,6 +16,7 @@ permissions:
 
 jobs:
   build:
+
     name: Build and test
     runs-on: ubuntu-latest
 
@@ -18,53 +24,49 @@ jobs:
       postgres:
         image: postgres:14-alpine
         env:
-          POSTGRES_DB: config_api_eventstore_test
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: config_api_eventstore
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
         ports:
           - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=5
 
     steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Elixir
-        uses: erlef/setup-beam@v1
-        with:
-          elixir-version: '1.18'
-          otp-version: '28.0'
-
-      - name: Restore dependencies cache
-        uses: actions/cache@v4
-        with:
-          path: deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
-
-      - name: Install dependencies
-        run: mix deps.get
-
-      - name: Wait for Postgres
-        run: |
-          until pg_isready -h localhost -U postgres; do
-            echo "Waiting for postgres..."
-            sleep 2
-          done
-
-      - name: Set up database
-        env:
-          MIX_ENV: test
-          POSTGRES_HOST: localhost
-        run: |
-          mix event_store.create
-          mix event_store.init
-
-      - name: Run tests
-        env:
-          MIX_ENV: test
-          POSTGRES_HOST: localhost
-        run: mix test
+    - uses: actions/checkout@v4
+    - name: Set up Elixir
+      uses: erlef/setup-beam@61e01a43a562a89bfc54c7f9a378ff67b03e4a21 # v1.16.0
+      with:
+        elixir-version: '1.18.4' # [Required] Define the Elixir version
+        otp-version: '28.0.2'      # [Required] Define the Erlang/OTP version
+    - name: Restore dependencies cache
+      uses: actions/cache@v3
+      with:
+        path: deps
+        key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+        restore-keys: ${{ runner.os }}-mix-
+    - name: Install dependencies
+      run: mix deps.get
+    - name: Initialize EventStore
+      run: |
+        mix event_store.create
+        mix event_store.init
+      env:
+        MIX_ENV: test
+        EVENTSTORE_HOST: localhost
+        EVENTSTORE_PORT: 5432
+        EVENTSTORE_DATABASE: config_api_eventstore
+        EVENTSTORE_USERNAME: postgres
+        EVENTSTORE_PASSWORD: postgres
+    - name: Run tests
+      run: mix test
+      env:
+        MIX_ENV: test
+        EVENTSTORE_HOST: localhost
+        EVENTSTORE_PORT: 5432
+        EVENTSTORE_DATABASE: config_api_eventstore
+        EVENTSTORE_USERNAME: postgres
+        EVENTSTORE_PASSWORD: postgres

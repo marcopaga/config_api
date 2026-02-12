@@ -1,0 +1,73 @@
+get:
+  summary: Health check
+  description: |
+    Check the health and readiness of the ConfigApi service.
+
+    **Checks performed**:
+    - **Projection**: Verifies ConfigStateProjection GenServer is running
+    - **EventStore**: Verifies EventStore database connection is active
+
+    **Response codes**:
+    - `200`: Service is healthy (all checks passed)
+    - `503`: Service is unhealthy (one or more checks failed)
+
+    **Use cases**:
+    - Kubernetes liveness/readiness probes
+    - Load balancer health checks
+    - Monitoring and alerting systems
+  operationId: getHealth
+  tags:
+    - Health
+  responses:
+    '200':
+      description: Service is healthy
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/health.yaml#/HealthResponse'
+          examples:
+            healthy:
+              summary: All systems operational
+              value:
+                status: "healthy"
+                timestamp: "2024-01-15T10:30:00.123456Z"
+                checks:
+                  projection:
+                    status: "ok"
+                    message: "Projection is running"
+                  event_store:
+                    status: "ok"
+                    message: "EventStore connection active"
+    '503':
+      description: Service is unhealthy (one or more checks failed)
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/health.yaml#/HealthResponse'
+          examples:
+            projection_down:
+              summary: Projection not running
+              value:
+                status: "unhealthy"
+                timestamp: "2024-01-15T10:30:00.123456Z"
+                checks:
+                  projection:
+                    status: "error"
+                    message: "Projection not started"
+                  event_store:
+                    status: "ok"
+                    message: "EventStore connection active"
+            event_store_down:
+              summary: EventStore connection failed
+              value:
+                status: "unhealthy"
+                timestamp: "2024-01-15T10:30:00.123456Z"
+                checks:
+                  projection:
+                    status: "ok"
+                    message: "Projection is running"
+                  event_store:
+                    status: "error"
+                    message: "EventStore connection failed"
+  x-cqrs-pattern: query
+  x-read-from: system-status

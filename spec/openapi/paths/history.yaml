@@ -1,0 +1,127 @@
+get:
+  summary: Get event history
+  description: |
+    Retrieve the complete event history for a configuration.
+
+    **CQRS Pattern**: Query operation (Event Sourcing audit trail)
+
+    **Data source**: EventStore (PostgreSQL)
+
+    **Response**: Array of events in chronological order (oldest first)
+
+    **Event types**:
+    - `ConfigValueSet`: Configuration was created or updated
+    - `ConfigValueDeleted`: Configuration was deleted
+
+    **Use cases**:
+    - Audit trail and compliance
+    - Debugging configuration changes
+    - Understanding who changed what and when
+    - Event replay and analysis
+
+    **Event structure**:
+    - `event_type`: Fully qualified Elixir module name
+    - `data`: Event-specific data (polymorphic)
+    - `metadata`: Event metadata (currently empty)
+    - `created_at`: When event was created
+    - `stream_version`: Version number in event stream (1, 2, 3...)
+
+    **Response codes**:
+    - `200`: Event history (may be empty array if no events)
+    - `404`: No events found for this configuration name
+  operationId: getConfigurationHistory
+  tags:
+    - History
+  parameters:
+    - $ref: '../parameters/path.yaml#/ConfigName'
+  responses:
+    '200':
+      description: Event history (may be empty array)
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '../schemas/responses.yaml#/EventHistoryItem'
+          examples:
+            single_set:
+              summary: Single set event
+              value:
+                - event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+                  data:
+                    config_name: "api_key"
+                    value: "secret123"
+                    old_value: null
+                    timestamp: "2024-01-15T10:30:00.123456Z"
+                  metadata: {}
+                  created_at: "2024-01-15T10:30:00.123456Z"
+                  stream_version: 1
+            set_update_delete:
+              summary: Set, update, then delete
+              value:
+                - event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+                  data:
+                    config_name: "api_key"
+                    value: "secret123"
+                    old_value: null
+                    timestamp: "2024-01-15T10:30:00.123456Z"
+                  metadata: {}
+                  created_at: "2024-01-15T10:30:00.123456Z"
+                  stream_version: 1
+                - event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+                  data:
+                    config_name: "api_key"
+                    value: "secret456"
+                    old_value: "secret123"
+                    timestamp: "2024-01-15T11:00:00.123456Z"
+                  metadata: {}
+                  created_at: "2024-01-15T11:00:00.123456Z"
+                  stream_version: 2
+                - event_type: "Elixir.ConfigApi.Events.ConfigValueDeleted"
+                  data:
+                    config_name: "api_key"
+                    deleted_value: "secret456"
+                    timestamp: "2024-01-15T12:00:00.123456Z"
+                  metadata: {}
+                  created_at: "2024-01-15T12:00:00.123456Z"
+                  stream_version: 3
+            resurrection:
+              summary: Delete then resurrect
+              value:
+                - event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+                  data:
+                    config_name: "api_key"
+                    value: "secret123"
+                    old_value: null
+                    timestamp: "2024-01-15T10:30:00.123456Z"
+                  metadata: {}
+                  created_at: "2024-01-15T10:30:00.123456Z"
+                  stream_version: 1
+                - event_type: "Elixir.ConfigApi.Events.ConfigValueDeleted"
+                  data:
+                    config_name: "api_key"
+                    deleted_value: "secret123"
+                    timestamp: "2024-01-15T11:00:00.123456Z"
+                  metadata: {}
+                  created_at: "2024-01-15T11:00:00.123456Z"
+                  stream_version: 2
+                - event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+                  data:
+                    config_name: "api_key"
+                    value: "secret789"
+                    old_value: null
+                    timestamp: "2024-01-15T12:00:00.123456Z"
+                  metadata: {}
+                  created_at: "2024-01-15T12:00:00.123456Z"
+                  stream_version: 3
+    '404':
+      description: No history found for this configuration
+      content:
+        text/plain:
+          schema:
+            $ref: '../schemas/errors.yaml#/NotFoundError'
+          example: "No history found for 'api_key'"
+  x-cqrs-pattern: query
+  x-read-from: EventStore (PostgreSQL)
+  x-event-sourcing: true
+  x-audit-trail: true

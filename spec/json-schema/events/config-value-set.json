@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://config-api.example.com/schemas/events/config-value-set.json",
+  "title": "ConfigValueSet Event",
+  "description": "Event emitted when a configuration value is set or updated. Part of the CQRS write path.",
+  "type": "object",
+  "required": [
+    "config_name",
+    "value",
+    "timestamp"
+  ],
+  "properties": {
+    "config_name": {
+      "type": "string",
+      "description": "The unique identifier for the configuration",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "examples": [
+        "api_key",
+        "database_url",
+        "feature_flag_enabled"
+      ]
+    },
+    "value": {
+      "type": "string",
+      "description": "The new value being set (can be empty string)",
+      "minLength": 0,
+      "maxLength": 1000000,
+      "examples": [
+        "production",
+        "https://api.example.com",
+        "",
+        "42"
+      ]
+    },
+    "old_value": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The previous value (null if this is the first set, or resurrection after delete)",
+      "examples": [
+        null,
+        "staging",
+        "https://old-api.example.com"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when the value was set",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$",
+      "examples": [
+        "2024-01-15T10:30:00.123456Z",
+        "2024-01-15T10:30:00Z"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "x-elixir-module": "ConfigApi.Events.ConfigValueSet",
+  "x-elixir-struct": true,
+  "x-event-category": "configuration",
+  "x-aggregate": "ConfigValue",
+  "x-cqrs-pattern": "event",
+  "x-business-rules": {
+    "resurrection": "old_value is null when setting a value after deletion",
+    "first-set": "old_value is null when setting a value for the first time",
+    "update": "old_value contains the previous value when updating",
+    "idempotency": "Setting the same value multiple times generates multiple events with same value"
+  },
+  "examples": [
+    {
+      "config_name": "api_key",
+      "value": "secret123",
+      "old_value": null,
+      "timestamp": "2024-01-15T10:30:00.123456Z",
+      "$comment": "First set - old_value is null"
+    },
+    {
+      "config_name": "api_key",
+      "value": "secret456",
+      "old_value": "secret123",
+      "timestamp": "2024-01-15T11:00:00.123456Z",
+      "$comment": "Update - old_value contains previous value"
+    },
+    {
+      "config_name": "api_key",
+      "value": "secret789",
+      "old_value": null,
+      "timestamp": "2024-01-15T12:00:00.123456Z",
+      "$comment": "Resurrection after delete - old_value is null"
+    },
+    {
+      "config_name": "feature_flag",
+      "value": "",
+      "old_value": "enabled",
+      "timestamp": "2024-01-15T13:00:00.123456Z",
+      "$comment": "Empty string is a valid value"
+    }
+  ]
+}

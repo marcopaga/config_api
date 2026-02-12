@@ -1,0 +1,209 @@
+get:
+  summary: Get configuration value
+  description: |
+    Retrieve the current value of a configuration by name.
+
+    **CQRS Pattern**: Query operation (read path)
+
+    **Data source**: ConfigStateProjection (in-memory ETS table)
+
+    **Performance**: Sub-millisecond response time (in-memory read)
+
+    **Consistency**: Immediate - reflects all committed writes
+
+    **Response format**: Plain text (not JSON)
+
+    **Response codes**:
+    - `200`: Configuration exists and value is returned
+    - `404`: Configuration does not exist or has been deleted
+  operationId: getConfiguration
+  tags:
+    - Configuration
+  parameters:
+    - $ref: '../parameters/path.yaml#/ConfigName'
+  responses:
+    '200':
+      description: Configuration value (plain text)
+      content:
+        text/plain:
+          schema:
+            type: string
+          examples:
+            simple:
+              summary: Simple string value
+              value: "production"
+            url:
+              summary: URL value
+              value: "https://api.example.com"
+            empty:
+              summary: Empty string (valid value)
+              value: ""
+            number:
+              summary: Numeric value (stored as string)
+              value: "42"
+            json:
+              summary: JSON string
+              value: '{"nested": "json"}'
+    '404':
+      description: Configuration not found or has been deleted
+      content:
+        text/plain:
+          schema:
+            $ref: '../schemas/errors.yaml#/NotFoundError'
+          example: "Configuration 'api_key' not found"
+  x-cqrs-pattern: query
+  x-read-from: ConfigStateProjection (ETS)
+  x-consistency: immediate
+  x-performance: sub-millisecond
+
+put:
+  summary: Set configuration value
+  description: |
+    Set or update a configuration value.
+
+    **CQRS Pattern**: Command operation (write path)
+
+    **Flow**:
+    1. Command is sent to ConfigValue aggregate
+    2. Aggregate validates and generates ConfigValueSet event
+    3. Event is persisted to EventStore (PostgreSQL)
+    4. Projection is updated synchronously (immediate consistency)
+    5. "OK" response returned
+
+    **Business rules** (enforced by aggregate):
+    - ✅ Allows setting the same value multiple times (idempotent)
+    - ✅ Allows resurrection of deleted configurations
+    - ✅ Empty strings are valid values
+    - ✅ No maximum value length (within practical limits)
+
+    **Response**: Plain text "OK" (not JSON)
+
+    **Idempotency**: Safe to retry - setting same value multiple times is allowed
+  operationId: setConfiguration
+  tags:
+    - Configuration
+  parameters:
+    - $ref: '../parameters/path.yaml#/ConfigName'
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: '../schemas/requests.yaml#/SetConfigRequest'
+        examples:
+          simple:
+            summary: Set simple value
+            value:
+              value: "production"
+          url:
+            summary: Set URL value
+            value:
+              value: "https://api.example.com"
+          empty:
+            summary: Set empty value (valid)
+            value:
+              value: ""
+          number:
+            summary: Set numeric value (as string)
+            value:
+              value: "42"
+          json:
+            summary: Set JSON value (as string)
+            value:
+              value: '{"nested": "json"}'
+          unicode:
+            summary: Set Unicode value
+            value:
+              value: "你好世界 🚀"
+  responses:
+    '200':
+      description: Configuration successfully set
+      content:
+        text/plain:
+          schema:
+            type: string
+            enum: ["OK"]
+          example: "OK"
+    '500':
+      description: Internal server error (event persistence or projection update failed)
+      content:
+        text/plain:
+          schema:
+            $ref: '../schemas/errors.yaml#/InternalServerError'
+          example: "Internal server error"
+  x-cqrs-pattern: command
+  x-aggregate: ConfigValue
+  x-generates-event: ConfigValueSet
+  x-consistency: immediate
+  x-idempotent: true
+
+delete:
+  summary: Delete configuration
+  description: |
+    Delete a configuration (creates a tombstone).
+
+    **CQRS Pattern**: Command operation (write path)
+
+    **Flow**:
+    1. Command is sent to ConfigValue aggregate
+    2. Aggregate validates and generates ConfigValueDeleted event
+    3. Event is persisted to EventStore (PostgreSQL)
+    4. Projection is updated synchronously (tombstone marker)
+    5. "OK" response returned
+
+    **Business rules** (enforced by aggregate):
+    - ✅ Can delete existing configurations
+    - ❌ Cannot delete already deleted configurations (returns 410 Gone)
+    - ❌ Cannot delete non-existent configurations (returns 404)
+    - ✅ Deleted configurations can be resurrected with PUT
+
+    **Tombstone behavior**:
+    - Deleted configurations are marked but not removed from event store
+    - Complete audit trail preserved
+    - GET returns 404 for deleted configurations
+    - History still accessible via /history endpoint
+
+    **Response codes**:
+    - `200`: Successfully deleted
+    - `404`: Configuration never existed
+    - `410`: Configuration already deleted (cannot delete twice)
+  operationId: deleteConfiguration
+  tags:
+    - Configuration
+  parameters:
+    - $ref: '../parameters/path.yaml#/ConfigName'
+  responses:
+    '200':
+      description: Configuration successfully deleted
+      content:
+        text/plain:
+          schema:
+            type: string
+            enum: ["OK"]
+          example: "OK"
+    '404':
+      description: Configuration does not exist
+      content:
+        text/plain:
+          schema:
+            $ref: '../schemas/errors.yaml#/NotFoundError'
+          example: "Configuration 'api_key' not found"
+    '410':
+      description: Configuration has already been deleted
+      content:
+        text/plain:
+          schema:
+            $ref: '../schemas/errors.yaml#/GoneError'
+          example: "Configuration 'api_key' has already been deleted"
+    '500':
+      description: Internal server error
+      content:
+        text/plain:
+          schema:
+            $ref: '../schemas/errors.yaml#/InternalServerError'
+          example: "Internal server error"
+  x-cqrs-pattern: command
+  x-aggregate: ConfigValue
+  x-generates-event: ConfigValueDeleted
+  x-consistency: immediate
+  x-creates-tombstone: true

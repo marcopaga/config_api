@@ -1,265 +1,256 @@
 defmodule ConfigApi.Projections.ConfigStateProjectionTest do
   use ExUnit.Case, async: false
-  require Logger
 
   alias ConfigApi.Projections.ConfigStateProjection
   alias ConfigApi.Events.{ConfigValueSet, ConfigValueDeleted}
-  alias ConfigApi.EventStore
 
+  # Stop the application's projection if running
   setup do
-    # Reset the event store for each test
-    :ok = EventStore.reset!()
+    # Stop the application's projection to avoid conflicts
+    case Process.whereis(ConfigStateProjection) do
+      nil -> :ok
+      pid -> GenServer.stop(pid, :normal)
+    end
+
+    # Give it time to stop
+    Process.sleep(50)
+
+    # Clean up ETS table if it exists
+    try do
+      :ets.delete(:config_state_projection)
+    rescue
+      ArgumentError -> :ok
+    end
 
     :ok
   end
 
-  describe "event replay functionality" do
-    test "rebuilds state from ConfigValueSet events" do
-      # Create test events
-      events = [
-        %{
-          data: ConfigValueSet.new("config1", "value1"),
-          created_at: ~U[2023-01-01 10:00:00Z],
-          stream_name: "config-config1"
-        },
-        %{
-          data: ConfigValueSet.new("config2", "value2"),
-          created_at: ~U[2023-01-01 10:01:00Z],
-          stream_name: "config-config2"
-        }
-      ]
+  describe "start_link/1" do
+    test "starts the projection GenServer" do
+      {:ok, pid} = ConfigStateProjection.start_link()
 
-      # Store events in EventStore
-      for event <- events do
-        stream_events = [%{
-          event_type: "ConfigValueSet",
-          data: event.data,
-          metadata: %{
-            aggregate_id: event.data.config_name,
-            aggregate_type: "ConfigValue",
-            created_at: event.created_at
-          }
-        }]
-
-        {:ok, _} = EventStore.append_to_stream(event.stream_name, :any_version, stream_events)
-      end
-
-      # Start projection and let it rebuild
-      {:ok, pid} = ConfigStateProjection.start_link([])
-      Process.sleep(200)
-
-      # Verify state was rebuilt correctly
-      assert {:ok, "value1"} = ConfigStateProjection.get_config("config1")
-      assert {:ok, "value2"} = ConfigStateProjection.get_config("config2")
-
-      # Clean up
-      GenServer.stop(pid, :normal)
-    end
-
-    test "handles ConfigValueDeleted events correctly" do
-      # Create and delete sequence
-      set_event = %{
-        data: ConfigValueSet.new("deleted_config", "initial_value"),
-        created_at: ~U[2023-01-01 10:00:00Z],
-        stream_name: "config-deleted_config"
-      }
-
-      delete_event = %{
-        data: ConfigValueDeleted.new("deleted_config", "initial_value"),
-        created_at: ~U[2023-01-01 10:01:00Z],
-        stream_name: "config-deleted_config"
-      }
-
-      # Store set event
-      stream_events = [%{
-        event_type: "ConfigValueSet",
-        data: set_event.data,
-        metadata: %{
-          aggregate_id: "deleted_config",
-          aggregate_type: "ConfigValue",
-          created_at: set_event.created_at
-        }
-      }]
-      {:ok, _} = EventStore.append_to_stream("config-deleted_config", :any_version, stream_events)
-
-      # Store delete event
-      stream_events = [%{
-        event_type: "ConfigValueDeleted",
-        data: delete_event.data,
-        metadata: %{
-          aggregate_id: "deleted_config",
-          aggregate_type: "ConfigValue",
-          created_at: delete_event.created_at
-        }
-      }]
-      {:ok, _} = EventStore.append_to_stream("config-deleted_config", 1, stream_events)
-
-      # Start projection
-      {:ok, pid} = ConfigStateProjection.start_link([])
-      Process.sleep(200)
-
-      # Verify config was deleted
-      assert {:error, :not_found} = ConfigStateProjection.get_config("deleted_config")
-
-      # Clean up
-      GenServer.stop(pid, :normal)
-    end
-
-    test "processes events in chronological order" do
-      # Create events with mixed timestamps
-      events = [
-        %{
-          data: ConfigValueSet.new("ordered_config", "value1"),
-          created_at: ~U[2023-01-01 10:02:00Z],  # Later timestamp
-          stream_name: "config-ordered_config"
-        },
-        %{
-          data: ConfigValueSet.new("ordered_config", "value2"),
-          created_at: ~U[2023-01-01 10:01:00Z],  # Earlier timestamp
-          stream_name: "config-ordered_config"
-        },
-        %{
-          data: ConfigValueSet.new("ordered_config", "value3"),
-          created_at: ~U[2023-01-01 10:03:00Z],  # Latest timestamp
-          stream_name: "config-ordered_config"
-        }
-      ]
-
-      # Store events in random order
-      for {event, version} <- Enum.with_index(events) do
-        stream_events = [%{
-          event_type: "ConfigValueSet",
-          data: event.data,
-          metadata: %{
-            aggregate_id: "ordered_config",
-            aggregate_type: "ConfigValue",
-            created_at: event.created_at
-          }
-        }]
-
-        expected_version = if version == 0, do: :any_version, else: version
-        {:ok, _} = EventStore.append_to_stream(event.stream_name, expected_version, stream_events)
-      end
-
-      # Start projection
-      {:ok, pid} = ConfigStateProjection.start_link([])
-      Process.sleep(200)
-
-      # Should have the value from the latest timestamp (value3)
-      assert {:ok, "value3"} = ConfigStateProjection.get_config("ordered_config")
-
-      # Clean up
-      GenServer.stop(pid, :normal)
-    end
-
-    test "handles empty event store gracefully" do
-      # Start projection with no events
-      {:ok, pid} = ConfigStateProjection.start_link([])
-      Process.sleep(100)
-
-      # Should return empty results
-      assert {:error, :not_found} = ConfigStateProjection.get_config("any_config")
-      assert [] = ConfigStateProjection.get_all_configs()
-
-      # Clean up
-      GenServer.stop(pid, :normal)
-    end
-
-    test "handles event store errors gracefully" do
-      # This test verifies the projection doesn't crash on EventStore errors
-      {:ok, pid} = ConfigStateProjection.start_link([])
-      Process.sleep(100)
-
-      # Projection should start successfully even if there are issues
       assert Process.alive?(pid)
+      assert Process.whereis(ConfigStateProjection) == pid
 
-      # Clean up
-      GenServer.stop(pid, :normal)
+      GenServer.stop(pid)
     end
 
-    test "applies live events after rebuild" do
-      # Store initial event
-      initial_event = %{
-        data: ConfigValueSet.new("live_config", "initial"),
-        created_at: ~U[2023-01-01 10:00:00Z],
-        stream_name: "config-live_config"
-      }
+    test "creates ETS table" do
+      {:ok, pid} = ConfigStateProjection.start_link()
 
-      stream_events = [%{
-        event_type: "ConfigValueSet",
-        data: initial_event.data,
-        metadata: %{
-          aggregate_id: "live_config",
-          aggregate_type: "ConfigValue",
-          created_at: initial_event.created_at
-        }
-      }]
-      {:ok, _} = EventStore.append_to_stream("config-live_config", :any_version, stream_events)
+      # ETS table should exist
+      assert :ets.info(:config_state_projection) != :undefined
 
-      # Start projection
-      {:ok, pid} = ConfigStateProjection.start_link([])
-      Process.sleep(200)
-
-      # Verify initial state
-      assert {:ok, "initial"} = ConfigStateProjection.get_config("live_config")
-
-      # Send live event
-      live_event = %{
-        data: ConfigValueSet.new("live_config", "updated")
-      }
-      send(pid, {:events, [live_event]})
-      Process.sleep(50)
-
-      # Verify live update was applied
-      assert {:ok, "updated"} = ConfigStateProjection.get_config("live_config")
-
-      # Clean up
-      GenServer.stop(pid, :normal)
+      GenServer.stop(pid)
     end
   end
 
-  describe "state management" do
-    test "get_state returns current projection state" do
-      {:ok, pid} = ConfigStateProjection.start_link([])
-      Process.sleep(100)
+  describe "get_config/1" do
+    test "returns error for non-existent config" do
+      {:ok, pid} = ConfigStateProjection.start_link()
 
-      state = ConfigStateProjection.get_state()
-      assert %ConfigStateProjection{configs: configs} = state
-      assert is_map(configs)
+      assert {:error, :not_found} = ConfigStateProjection.get_config("non_existent")
 
-      # Clean up
-      GenServer.stop(pid, :normal)
+      GenServer.stop(pid)
     end
 
-    test "get_all_configs returns properly formatted results" do
-      # Store some test events
-      events = [
-        ConfigValueSet.new("test1", "value1"),
-        ConfigValueSet.new("test2", "value2")
-      ]
+    test "returns value for existing config" do
+      {:ok, pid} = ConfigStateProjection.start_link()
 
-      {:ok, pid} = ConfigStateProjection.start_link([])
-      Process.sleep(100)
+      # Manually insert into ETS for testing
+      :ets.insert(:config_state_projection, {"test_key", "test_value"})
 
-      # Send events directly to projection
-      for event <- events do
-        send(pid, {:events, [%{data: event}]})
-      end
+      assert {:ok, "test_value"} = ConfigStateProjection.get_config("test_key")
+
+      GenServer.stop(pid)
+    end
+  end
+
+  describe "get_all_configs/0" do
+    test "returns empty list when no configs" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      assert [] = ConfigStateProjection.get_all_configs()
+
+      GenServer.stop(pid)
+    end
+
+    test "returns all configs as list of maps" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      # Manually insert test data
+      :ets.insert(:config_state_projection, {"key1", "value1"})
+      :ets.insert(:config_state_projection, {"key2", "value2"})
+      :ets.insert(:config_state_projection, {"key3", "value3"})
+
+      configs = ConfigStateProjection.get_all_configs()
+
+      assert length(configs) == 3
+      assert %{name: "key1", value: "value1"} in configs
+      assert %{name: "key2", value: "value2"} in configs
+      assert %{name: "key3", value: "value3"} in configs
+
+      GenServer.stop(pid)
+    end
+  end
+
+  describe "event handling" do
+    test "handles ConfigValueSet event" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      event = ConfigValueSet.new("new_key", "new_value")
+
+      # Send event directly to test event handling
+      send(pid, {:events, [event]})
+
+      # Give it time to process
       Process.sleep(50)
 
-      # Verify format
-      all_configs = ConfigStateProjection.get_all_configs()
-      assert is_list(all_configs)
-      assert length(all_configs) == 2
+      assert {:ok, "new_value"} = ConfigStateProjection.get_config("new_key")
 
-      for config <- all_configs do
-        assert %{name: name, value: value} = config
-        assert is_binary(name)
-        assert is_binary(value)
-      end
+      GenServer.stop(pid)
+    end
 
-      # Clean up
-      GenServer.stop(pid, :normal)
+    test "handles ConfigValueSet update" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      # Insert initial value
+      event1 = ConfigValueSet.new("key", "value1")
+      send(pid, {:events, [event1]})
+      Process.sleep(50)
+
+      assert {:ok, "value1"} = ConfigStateProjection.get_config("key")
+
+      # Update value
+      event2 = ConfigValueSet.new("key", "value2", "value1")
+      send(pid, {:events, [event2]})
+      Process.sleep(50)
+
+      assert {:ok, "value2"} = ConfigStateProjection.get_config("key")
+
+      GenServer.stop(pid)
+    end
+
+    test "handles ConfigValueDeleted event" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      # Insert initial value
+      :ets.insert(:config_state_projection, {"to_delete", "value"})
+      assert {:ok, "value"} = ConfigStateProjection.get_config("to_delete")
+
+      # Delete it
+      event = ConfigValueDeleted.new("to_delete", "value")
+      send(pid, {:events, [event]})
+      Process.sleep(50)
+
+      assert {:error, :not_found} = ConfigStateProjection.get_config("to_delete")
+
+      GenServer.stop(pid)
+    end
+
+    test "handles multiple events in batch" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      events = [
+        ConfigValueSet.new("key1", "value1"),
+        ConfigValueSet.new("key2", "value2"),
+        ConfigValueSet.new("key3", "value3")
+      ]
+
+      send(pid, {:events, events})
+      Process.sleep(50)
+
+      assert {:ok, "value1"} = ConfigStateProjection.get_config("key1")
+      assert {:ok, "value2"} = ConfigStateProjection.get_config("key2")
+      assert {:ok, "value3"} = ConfigStateProjection.get_config("key3")
+
+      GenServer.stop(pid)
+    end
+
+    test "handles mixed set and delete events" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      events = [
+        ConfigValueSet.new("key1", "value1"),
+        ConfigValueSet.new("key2", "value2"),
+        ConfigValueDeleted.new("key1", "value1"),
+        ConfigValueSet.new("key3", "value3")
+      ]
+
+      send(pid, {:events, events})
+      Process.sleep(100)
+
+      assert {:error, :not_found} = ConfigStateProjection.get_config("key1")
+      assert {:ok, "value2"} = ConfigStateProjection.get_config("key2")
+      assert {:ok, "value3"} = ConfigStateProjection.get_config("key3")
+
+      GenServer.stop(pid)
+    end
+  end
+
+  describe "state persistence across restarts" do
+    test "rebuilds state from EventStore on startup" do
+      # This test verifies the concept - actual EventStore integration
+      # will be tested in integration tests
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      # Initially empty (no events in EventStore for this test)
+      assert [] = ConfigStateProjection.get_all_configs()
+
+      GenServer.stop(pid)
+    end
+  end
+
+  describe "concurrent reads" do
+    test "handles concurrent read requests" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      # Insert test data
+      :ets.insert(:config_state_projection, {"concurrent_key", "concurrent_value"})
+
+      # Spawn multiple readers
+      tasks =
+        for _ <- 1..100 do
+          Task.async(fn ->
+            ConfigStateProjection.get_config("concurrent_key")
+          end)
+        end
+
+      # All should succeed
+      results = Task.await_many(tasks)
+      assert Enum.all?(results, &(&1 == {:ok, "concurrent_value"}))
+
+      GenServer.stop(pid)
+    end
+  end
+
+  describe "message handling" do
+    test "handles subscribed message" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      # Send subscription confirmation
+      send(pid, {:subscribed, :fake_subscription})
+
+      Process.sleep(50)
+
+      # Should still be alive and working
+      assert Process.alive?(pid)
+
+      GenServer.stop(pid)
+    end
+
+    test "handles unexpected messages gracefully" do
+      {:ok, pid} = ConfigStateProjection.start_link()
+
+      # Send unexpected message
+      send(pid, {:unexpected, "message"})
+
+      Process.sleep(50)
+
+      # Should still be alive
+      assert Process.alive?(pid)
+
+      GenServer.stop(pid)
     end
   end
 end

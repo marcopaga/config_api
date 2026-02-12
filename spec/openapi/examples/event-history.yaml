@@ -1,0 +1,142 @@
+# Examples for event history operations
+
+get_history_single_set:
+  summary: Get history after single set
+  description: |
+    History shows single ConfigValueSet event.
+  value:
+    curl: |
+      curl http://localhost:4000/v1/config/api_key/history
+    response:
+      status: 200
+      body:
+        - event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+          data:
+            config_name: "api_key"
+            value: "secret123"
+            old_value: null
+            timestamp: "2024-01-15T10:30:00.123456Z"
+          metadata: {}
+          created_at: "2024-01-15T10:30:00.123456Z"
+          stream_version: 1
+
+get_history_multiple_events:
+  summary: Get history with multiple events
+  description: |
+    History shows full event timeline: set, update, delete, resurrect.
+  value:
+    curl: |
+      curl http://localhost:4000/v1/config/api_key/history
+    response:
+      status: 200
+      body:
+        - event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+          data:
+            config_name: "api_key"
+            value: "secret123"
+            old_value: null
+            timestamp: "2024-01-15T10:30:00.123456Z"
+          metadata: {}
+          created_at: "2024-01-15T10:30:00.123456Z"
+          stream_version: 1
+        - event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+          data:
+            config_name: "api_key"
+            value: "secret456"
+            old_value: "secret123"
+            timestamp: "2024-01-15T11:00:00.123456Z"
+          metadata: {}
+          created_at: "2024-01-15T11:00:00.123456Z"
+          stream_version: 2
+        - event_type: "Elixir.ConfigApi.Events.ConfigValueDeleted"
+          data:
+            config_name: "api_key"
+            deleted_value: "secret456"
+            timestamp: "2024-01-15T12:00:00.123456Z"
+          metadata: {}
+          created_at: "2024-01-15T12:00:00.123456Z"
+          stream_version: 3
+        - event_type: "Elixir.ConfigApi.Events.ConfigValueSet"
+          data:
+            config_name: "api_key"
+            value: "secret789"
+            old_value: null
+            timestamp: "2024-01-15T13:00:00.123456Z"
+          metadata: {}
+          created_at: "2024-01-15T13:00:00.123456Z"
+          stream_version: 4
+
+time_travel_query_before_update:
+  summary: Time-travel query before an update
+  description: |
+    Query value as it existed before an update event.
+  value:
+    setup: |
+      # Events:
+      # 10:00:00 - SET to "value1"
+      # 11:00:00 - SET to "value2"
+    curl: |
+      # Query at 10:30:00 (between the two sets)
+      curl http://localhost:4000/v1/config/api_key/at/2024-01-15T10:30:00Z
+    response:
+      status: 200
+      body: "value1"
+
+time_travel_query_after_delete:
+  summary: Time-travel query after deletion
+  description: |
+    Query returns 404 if configuration was deleted at the timestamp.
+  value:
+    setup: |
+      # Events:
+      # 10:00:00 - SET to "value1"
+      # 11:00:00 - DELETE
+    curl: |
+      # Query at 11:30:00 (after deletion)
+      curl http://localhost:4000/v1/config/api_key/at/2024-01-15T11:30:00Z
+    response:
+      status: 404
+      body: "Configuration 'api_key' not found at 2024-01-15T11:30:00Z"
+
+time_travel_query_resurrection:
+  summary: Time-travel query after resurrection
+  description: |
+    Query after delete and resurrect shows new value.
+  value:
+    setup: |
+      # Events:
+      # 10:00:00 - SET to "value1"
+      # 11:00:00 - DELETE
+      # 12:00:00 - SET to "value2"
+    curl: |
+      # Query at 12:30:00 (after resurrection)
+      curl http://localhost:4000/v1/config/api_key/at/2024-01-15T12:30:00Z
+    response:
+      status: 200
+      body: "value2"
+
+time_travel_invalid_format:
+  summary: Time-travel query with invalid timestamp
+  description: |
+    Returns 400 for malformed timestamps.
+  value:
+    curl: |
+      curl http://localhost:4000/v1/config/api_key/at/invalid-timestamp
+    response:
+      status: 400
+      body: "Invalid timestamp format. Must be ISO8601."
+
+time_travel_before_creation:
+  summary: Time-travel query before configuration existed
+  description: |
+    Returns 404 for timestamps before any events.
+  value:
+    setup: |
+      # Events:
+      # 10:00:00 - SET to "value1"
+    curl: |
+      # Query at 09:00:00 (before creation)
+      curl http://localhost:4000/v1/config/api_key/at/2024-01-15T09:00:00Z
+    response:
+      status: 404
+      body: "Configuration 'api_key' not found at 2024-01-15T09:00:00Z"

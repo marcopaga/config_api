@@ -1,204 +1,226 @@
 defmodule ConfigApi.Projections.ConfigStateProjection do
+  @moduledoc """
+  Read model projection for configuration state.
+
+  This GenServer maintains an in-memory ETS table with the current state
+  of all configurations, rebuilt from events on startup and updated as
+  new events arrive.
+
+  This implements the "query side" of CQRS - fast reads from memory.
+  """
+
   use GenServer
   require Logger
 
   alias ConfigApi.Events.{ConfigValueSet, ConfigValueDeleted}
-  alias ConfigApi.EventStore
 
-  # State structure: %{config_name => %{value: value, version: version, updated_at: timestamp}}
-  defstruct configs: %{}
+  @table_name :config_state_projection
 
-  # Client API
+  # Ensure event modules are loaded and atoms exist for deserialization
+  # This MUST happen at module compile time
+  @event_modules [ConfigValueSet, ConfigValueDeleted]
+  def __event_modules__, do: @event_modules
+
+  ## Client API
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc """
+  Gets a configuration value by name.
+
+  Returns {:ok, value} if found, {:error, :not_found} otherwise.
+  """
+  @spec get_config(String.t()) :: {:ok, String.t()} | {:error, :not_found}
   def get_config(name) do
-    GenServer.call(__MODULE__, {:get_config, name})
+    case :ets.lookup(@table_name, name) do
+      [{^name, value}] -> {:ok, value}
+      [] -> {:error, :not_found}
+    end
   end
 
+  @doc """
+  Gets all configuration values.
+
+  Returns a list of maps with :name and :value keys.
+  """
+  @spec get_all_configs() :: [%{name: String.t(), value: String.t()}]
   def get_all_configs do
-    GenServer.call(__MODULE__, :get_all_configs)
+    @table_name
+    |> :ets.tab2list()
+    |> Enum.map(fn {name, value} -> %{name: name, value: value} end)
   end
 
-  def get_state do
-    GenServer.call(__MODULE__, :get_state)
+  @doc """
+  Immediately apply an event to the projection.
+
+  Called synchronously after appending events for immediate consistency.
+  """
+  def apply_event_immediately(event) do
+    apply_event(event)
+    Logger.debug("Applied event immediately to projection: #{inspect(event.__struct__)}")
+    :ok
   end
 
-  # Server Callbacks
+  ## Server Callbacks
+
   @impl true
   def init(_opts) do
     Logger.info("ConfigStateProjection starting...")
 
-    # Rebuild state from existing events first
-    state = rebuild_state_from_events()
+    # Create ETS table
+    table = :ets.new(@table_name, [:set, :named_table, :public, read_concurrency: true])
 
-    # Subscribe to events from EventStore with error handling
-    case subscribe_to_events() do
-      {:ok, subscription} ->
-        Logger.info("ConfigStateProjection subscribed to EventStore events")
-        new_state = Map.put(state, :subscription, subscription)
-        Logger.info("ConfigStateProjection started with #{map_size(state.configs)} configs")
-        {:ok, new_state}
+    # Rebuild state from all events
+    Logger.info("Rebuilding ConfigStateProjection state from existing events...")
+    rebuild_from_events()
 
-      {:error, reason} ->
-        Logger.error("Failed to subscribe to EventStore: #{inspect(reason)}")
-        Logger.warning("Starting without event subscription - real-time updates disabled")
-        Logger.info("ConfigStateProjection started with #{map_size(state.configs)} configs (no subscription)")
-        {:ok, state}
-    end
-  end
+    # Subscribe to new events
+    {:ok, _subscription} = subscribe_to_events()
+    Logger.info("Event subscriptions enabled")
 
-  @impl true
-  def handle_call({:get_config, name}, _from, state) do
-    case Map.get(state.configs, name) do
-      nil -> {:reply, {:error, :not_found}, state}
-      config -> {:reply, {:ok, config.value}, state}
-    end
-  end
+    config_count = :ets.info(@table_name, :size)
+    Logger.info("ConfigStateProjection started with #{config_count} configs")
 
-  @impl true
-  def handle_call(:get_all_configs, _from, state) do
-    configs =
-      state.configs
-      |> Enum.map(fn {name, config} -> %{name: name, value: config.value} end)
-
-    {:reply, configs, state}
-  end
-
-  @impl true
-  def handle_call(:get_state, _from, state) do
-    {:reply, state, state}
+    {:ok, %{table: table}}
   end
 
   @impl true
   def handle_info({:events, events}, state) do
-    Logger.debug("ConfigStateProjection received #{length(events)} events")
-    new_state = Enum.reduce(events, state, &apply_event/2)
-    Logger.debug("ConfigStateProjection processed events, total configs: #{map_size(new_state.configs)}")
-    {:noreply, new_state}
+    Logger.info("Received #{length(events)} events from subscription")
+
+    # Check if these are RecordedEvents (from real subscription) or raw events (from tests/immediate updates)
+    are_recorded_events = events != [] and is_struct(List.first(events), EventStore.RecordedEvent)
+
+    # Process each event
+    Enum.each(events, fn event ->
+      # If it's a RecordedEvent (from subscription or rebuild), extract .data
+      # If it's already an event struct, use it directly
+      event_data = if are_recorded_events, do: event.data, else: event
+      Logger.debug("Processing event: #{inspect(event_data.__struct__)}")
+      apply_event(event_data)
+    end)
+
+    # Acknowledge events ONLY if they are RecordedEvents from a real subscription
+    if are_recorded_events do
+      case Map.get(state, :subscription) do
+        nil -> :ok
+        subscription ->
+          Logger.debug("Acknowledging #{length(events)} RecordedEvents")
+          ConfigApi.EventStore.ack(subscription, List.last(events))
+      end
+    end
+
+    {:noreply, state}
   end
 
-  # Handle subscription errors and attempt reconnection
   @impl true
-  def handle_info({:subscription_error, error}, state) do
-    Logger.error("EventStore subscription error: #{inspect(error)}")
-    Logger.info("Attempting to reconnect to EventStore...")
-
-    case subscribe_to_events() do
-      {:ok, subscription} ->
-        Logger.info("Successfully reconnected to EventStore")
-        new_state = Map.put(state, :subscription, subscription)
-        {:noreply, new_state}
-
-      {:error, reason} ->
-        Logger.error("Failed to reconnect to EventStore: #{inspect(reason)}")
-        Logger.warning("Will continue without real-time updates")
-        {:noreply, state}
-    end
+  def handle_info({:subscribed, subscription}, state) do
+    Logger.info("ConfigStateProjection subscribed to EventStore events")
+    {:noreply, Map.put(state, :subscription, subscription)}
   end
 
   @impl true
   def handle_info(msg, state) do
-    Logger.warning("ConfigStateProjection received unexpected message: #{inspect(msg)}")
+    Logger.warning("ConfigStateProjection received unexpected message: #{inspect(msg, pretty: true, limit: 5)}")
     {:noreply, state}
   end
 
-  # Private functions
-  defp rebuild_state_from_events do
-    Logger.info("Rebuilding ConfigStateProjection state from existing events...")
+  ## Private Functions
+
+  defp rebuild_from_events do
+    Logger.info("rebuild_from_events: Reading all config streams...")
+
+    # Ensure event modules are loaded and atoms exist before reading
+    Enum.each(@event_modules, fn mod ->
+      Code.ensure_loaded!(mod)
+      # Force the module atom to exist in the atom table
+      _ = mod.__info__(:module)
+    end)
 
     try do
-      # Read all events from all config streams
-      case read_all_config_events() do
-        {:ok, events} ->
-          Logger.info("Found #{length(events)} events to replay")
+      # Get all stream names from the database
+      # Then read from each stream
+      config = ConfigApi.EventStore.config()
+      {:ok, conn} = Postgrex.start_link(config)
 
-          # Sort events by creation time to ensure proper order
-          sorted_events = Enum.sort_by(events, & &1.created_at, DateTime)
+      # Query for all config-* streams
+      {:ok, result} =
+        Postgrex.query(
+          conn,
+          "SELECT stream_uuid FROM streams WHERE stream_uuid LIKE 'config-%' AND deleted_at IS NULL",
+          []
+        )
 
-          # Apply events to rebuild state
-          state = Enum.reduce(sorted_events, %__MODULE__{}, &apply_event/2)
+      GenServer.stop(conn)
 
-          config_count = map_size(state.configs)
-          Logger.info("State rebuild complete: #{config_count} configurations restored")
-          state
+      stream_names = Enum.map(result.rows, fn [name] -> name end)
+      Logger.info("Found #{length(stream_names)} config streams to rebuild from")
 
-        {:error, reason} ->
-          Logger.error("Failed to read events during state rebuild: #{inspect(reason)}")
-          Logger.warning("Starting with empty state due to event read failure")
-          %__MODULE__{}
+      # Read events from each stream
+      all_events =
+        Enum.flat_map(stream_names, fn stream_name ->
+          case ConfigApi.EventStore.read_stream_forward(stream_name) do
+            {:ok, events} ->
+              Logger.debug("Read #{length(events)} events from #{stream_name}")
+              events
+
+            {:error, reason} ->
+              Logger.warning("Failed to read #{stream_name}: #{inspect(reason)}")
+              []
+          end
+        end)
+
+      case all_events do
+        [] ->
+          Logger.warning("No events found in any streams, starting with empty state")
+          :ok
+
+        events ->
+          Logger.info("Replaying #{length(events)} events from all config streams...")
+
+          Enum.each(events, fn recorded_event ->
+            Logger.debug(
+              "Applying event: #{inspect(recorded_event.event_type)}"
+            )
+
+            apply_event(recorded_event.data)
+          end)
+
+          Logger.info("Successfully rebuilt projection from #{length(events)} events")
+          :ok
       end
     rescue
       error ->
-        Logger.error("Exception during state rebuild: #{inspect(error)}")
-        Logger.warning("Starting with empty state due to exception")
-        %__MODULE__{}
-    end
-  end
-
-  defp read_all_config_events do
-    try do
-      # Use the EventStore $all stream to read all events
-      case EventStore.read_stream_forward("$all") do
-        {:ok, all_events} ->
-          # Filter for config-related streams only
-          config_events =
-            all_events
-            |> Enum.filter(fn event ->
-              String.starts_with?(event.stream_name, "config-")
-            end)
-
-          {:ok, config_events}
-
-        {:error, :stream_not_found} ->
-          # No events exist yet
-          Logger.info("No events found in EventStore")
-          {:ok, []}
-
-        {:error, reason} = error ->
-          Logger.error("Failed to read $all stream: #{inspect(reason)}")
-          error
-
-        error ->
-          Logger.error("Unexpected response reading $all stream: #{inspect(error)}")
-          {:error, :unexpected_response}
-      end
-    rescue
-      error ->
-        Logger.error("Exception reading all config events: #{inspect(error)}")
-        {:error, {:exception, error}}
+        Logger.error("Failed to rebuild from events: #{inspect(error)}")
+        Logger.warning("Starting with empty state due to rebuild failure")
+        :ok
     end
   end
 
   defp subscribe_to_events do
-    try do
-      ConfigApi.EventStore.subscribe_to_all_streams("config_state_projection", self())
-    rescue
-      error ->
-        Logger.error("Exception during EventStore subscription: #{inspect(error)}")
-        {:error, {:exception, error}}
-    end
+    # Use persistent subscription for reliable event delivery
+    # This creates a durable subscription that survives restarts
+    {:ok, subscription} = ConfigApi.EventStore.subscribe_to_all_streams(
+      "config_state_projection_subscription",
+      self(),
+      start_from: :current
+    )
+    Logger.info("Created persistent subscription: #{inspect(subscription)}")
+    {:ok, subscription}
   end
 
-  defp apply_event(%{data: %ConfigValueSet{} = event}, state) do
-    config_info = %{
-      value: event.value,
-      version: Map.get(state.configs, event.config_name, %{version: 0}).version + 1,
-      updated_at: event.timestamp
-    }
-
-    new_configs = Map.put(state.configs, event.config_name, config_info)
-    %{state | configs: new_configs}
+  defp apply_event(%ConfigValueSet{config_name: name, value: value}) do
+    :ets.insert(@table_name, {name, value})
   end
 
-  defp apply_event(%{data: %ConfigValueDeleted{} = event}, state) do
-    new_configs = Map.delete(state.configs, event.config_name)
-    %{state | configs: new_configs}
+  defp apply_event(%ConfigValueDeleted{config_name: name}) do
+    :ets.delete(@table_name, name)
   end
 
-  defp apply_event(_event, state) do
-    # Ignore unknown events
-    state
+  defp apply_event(event) do
+    Logger.debug("Ignoring unknown event type: #{inspect(event.__struct__)}")
+    :ok
   end
 end

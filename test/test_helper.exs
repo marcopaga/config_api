@@ -1,1 +1,16 @@
 ExUnit.start()
+
+# Ensure EventStore test database is initialized
+case Mix.Task.run("event_store.init", ["--quiet"]) do
+  :ok -> :ok
+  {:error, _} -> :ok  # Already initialized
+  _ -> :ok
+end
+
+# Start EventStore for tests (may already be started by application)
+{:ok, _} = Application.ensure_all_started(:postgrex)
+
+case ConfigApi.EventStore.start_link() do
+  {:ok, _pid} -> :ok
+  {:error, {:already_started, _pid}} -> :ok
+end

@@ -1,0 +1,45 @@
+BadRequestError:
+  type: string
+  description: Plain text error message for bad request (400)
+  examples:
+    - "Invalid timestamp format. Must be ISO8601."
+  x-http-status: 400
+  x-content-type: text/plain
+
+NotFoundError:
+  type: string
+  description: Plain text error message for not found (404)
+  examples:
+    - "Configuration 'api_key' not found"
+    - "No history found for 'api_key'"
+  x-http-status: 404
+  x-content-type: text/plain
+
+GoneError:
+  type: string
+  description: Plain text error message for already deleted configuration (410)
+  examples:
+    - "Configuration 'api_key' has already been deleted"
+  x-http-status: 410
+  x-content-type: text/plain
+  x-cqrs-note: |
+    Returns 410 when attempting to delete an already deleted configuration.
+    This is a business rule enforced by the ConfigValue aggregate.
+
+InternalServerError:
+  type: string
+  description: Plain text error message for internal server error (500)
+  examples:
+    - "Internal server error"
+    - "Failed to execute command"
+  x-http-status: 500
+  x-content-type: text/plain
+
+ServiceUnavailableError:
+  type: string
+  description: Plain text error message for service unavailable (503)
+  examples:
+    - "Service unavailable"
+    - "Health check failed"
+  x-http-status: 503
+  x-content-type: text/plain

@@ -1,0 +1,160 @@
+# Comprehensive examples for configuration operations
+
+set_simple_value:
+  summary: Set a simple configuration value
+  description: |
+    Basic PUT operation to set a configuration value.
+  value:
+    curl: |
+      curl -X PUT http://localhost:4000/v1/config/api_key \
+        -H "Content-Type: application/json" \
+        -d '{"value":"secret123"}'
+    elixir: |
+      # Using HTTPoison
+      HTTPoison.put!(
+        "http://localhost:4000/v1/config/api_key",
+        Jason.encode!(%{value: "secret123"}),
+        [{"Content-Type", "application/json"}]
+      )
+    response:
+      status: 200
+      body: "OK"
+
+set_empty_value:
+  summary: Set an empty string value (valid)
+  description: |
+    Empty strings are valid configuration values.
+  value:
+    curl: |
+      curl -X PUT http://localhost:4000/v1/config/optional_setting \
+        -H "Content-Type: application/json" \
+        -d '{"value":""}'
+    response:
+      status: 200
+      body: "OK"
+
+set_unicode_value:
+  summary: Set a Unicode value
+  description: |
+    Configuration values support full Unicode including emojis.
+  value:
+    curl: |
+      curl -X PUT http://localhost:4000/v1/config/welcome_message \
+        -H "Content-Type: application/json" \
+        -d '{"value":"你好世界 🚀"}'
+    response:
+      status: 200
+      body: "OK"
+
+set_json_value:
+  summary: Set a JSON string value
+  description: |
+    Configuration values are strings, so JSON must be escaped.
+  value:
+    curl: |
+      curl -X PUT http://localhost:4000/v1/config/app_settings \
+        -H "Content-Type: application/json" \
+        -d '{"value":"{\"nested\":\"json\",\"count\":42}"}'
+    response:
+      status: 200
+      body: "OK"
+
+get_value:
+  summary: Get a configuration value
+  description: |
+    GET returns plain text, not JSON.
+  value:
+    curl: |
+      curl http://localhost:4000/v1/config/api_key
+    response:
+      status: 200
+      headers:
+        Content-Type: text/plain
+      body: "secret123"
+
+get_not_found:
+  summary: Get a non-existent configuration
+  description: |
+    Returns 404 for configurations that don't exist or have been deleted.
+  value:
+    curl: |
+      curl http://localhost:4000/v1/config/nonexistent
+    response:
+      status: 404
+      body: "Configuration 'nonexistent' not found"
+
+list_all:
+  summary: List all configurations
+  description: |
+    GET /v1/config returns JSON array of all configurations.
+  value:
+    curl: |
+      curl http://localhost:4000/v1/config
+    response:
+      status: 200
+      headers:
+        Content-Type: application/json
+      body:
+        - name: "api_key"
+          value: "secret123"
+        - name: "database_url"
+          value: "postgresql://localhost/mydb"
+
+delete_configuration:
+  summary: Delete a configuration
+  description: |
+    DELETE creates a tombstone event.
+  value:
+    curl: |
+      curl -X DELETE http://localhost:4000/v1/config/api_key
+    response:
+      status: 200
+      body: "OK"
+
+delete_already_deleted:
+  summary: Delete an already deleted configuration
+  description: |
+    Returns 410 Gone when trying to delete an already deleted configuration.
+  value:
+    curl: |
+      # First delete
+      curl -X DELETE http://localhost:4000/v1/config/api_key
+      # Second delete
+      curl -X DELETE http://localhost:4000/v1/config/api_key
+    response:
+      status: 410
+      body: "Configuration 'api_key' has already been deleted"
+
+resurrect_deleted:
+  summary: Resurrect a deleted configuration
+  description: |
+    Deleted configurations can be set again (resurrection).
+  value:
+    curl: |
+      # Delete
+      curl -X DELETE http://localhost:4000/v1/config/api_key
+      # Resurrect with new value
+      curl -X PUT http://localhost:4000/v1/config/api_key \
+        -H "Content-Type: application/json" \
+        -d '{"value":"new_secret"}'
+    response:
+      status: 200
+      body: "OK"
+
+idempotent_set:
+  summary: Set the same value multiple times (idempotent)
+  description: |
+    Setting the same value multiple times is allowed and idempotent.
+  value:
+    curl: |
+      # First set
+      curl -X PUT http://localhost:4000/v1/config/api_key \
+        -H "Content-Type: application/json" \
+        -d '{"value":"secret123"}'
+      # Second set (same value)
+      curl -X PUT http://localhost:4000/v1/config/api_key \
+        -H "Content-Type: application/json" \
+        -d '{"value":"secret123"}'
+    response:
+      status: 200
+      body: "OK"

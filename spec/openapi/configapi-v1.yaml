@@ -1,0 +1,159 @@
+openapi: 3.1.0
+
+info:
+  title: ConfigApi - CQRS Configuration Management
+  version: 1.0.0
+  description: |
+    # ConfigApi - Configuration Management with CQRS and Event Sourcing
+
+    A production-grade configuration management API implementing **CQRS (Command Query Responsibility Segregation)**
+    with **Event Sourcing** architecture.
+
+    ## Architecture Overview
+
+    **Write Path (Commands)**:
+    - Commands are validated by aggregates
+    - Events are persisted to PostgreSQL via EventStore
+    - Projections are updated synchronously for immediate consistency
+
+    **Read Path (Queries)**:
+    - Fast in-memory reads from ETS-based projections
+    - Sub-millisecond query performance
+    - Eventually consistent with write path (immediate updates)
+
+    **Event Store**:
+    - Complete audit trail of all changes
+    - Enables time-travel queries
+    - Supports event replay and debugging
+
+    ## Key Features
+
+    - ✅ **Immediate Consistency**: Reads reflect writes immediately
+    - ✅ **Event Sourcing**: Complete audit trail preserved
+    - ✅ **Time Travel**: Query configuration at any historical timestamp
+    - ✅ **High Performance**: Sub-millisecond reads from in-memory projection
+    - ✅ **RESTful API**: Standard HTTP methods and status codes
+    - ✅ **CQRS Pattern**: Separated read and write paths
+
+    ## Consistency Model
+
+    This API uses **synchronous projection updates** for immediate consistency:
+    - Write operations update the projection before returning
+    - Reads always reflect the latest writes
+    - No eventual consistency delays
+    - Strong consistency guarantees
+
+  contact:
+    name: ConfigApi Support
+    url: https://github.com/anthropics/config_api
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:4000
+    description: Local development server
+  - url: https://staging-api.example.com
+    description: Staging environment
+  - url: https://api.example.com
+    description: Production environment
+
+tags:
+  - name: Health
+    description: Service health and readiness checks
+  - name: Configuration
+    description: CRUD operations for configuration values (CQRS commands and queries)
+  - name: History
+    description: Event history and audit trail (Event Sourcing queries)
+  - name: Time-Travel
+    description: Historical state queries (Event replay)
+
+x-tagGroups:
+  - name: Service
+    tags:
+      - Health
+  - name: CQRS Commands
+    tags:
+      - Configuration
+  - name: CQRS Queries
+    tags:
+      - Configuration
+      - History
+      - Time-Travel
+
+paths:
+  /v1/health:
+    $ref: './paths/health.yaml'
+  /v1/config:
+    $ref: './paths/config.yaml'
+  /v1/config/{name}:
+    $ref: './paths/config-item.yaml'
+  /v1/config/{name}/history:
+    $ref: './paths/history.yaml'
+  /v1/config/{name}/at/{timestamp}:
+    $ref: './paths/time-travel.yaml'
+
+components:
+  schemas:
+    # Request schemas
+    SetConfigRequest:
+      $ref: './schemas/requests.yaml#/SetConfigRequest'
+
+    # Response schemas
+    HealthResponse:
+      $ref: './schemas/health.yaml#/HealthResponse'
+    ConfigListItem:
+      $ref: './schemas/responses.yaml#/ConfigListItem'
+    EventHistoryItem:
+      $ref: './schemas/responses.yaml#/EventHistoryItem'
+    ConfigValueSetData:
+      $ref: './schemas/responses.yaml#/ConfigValueSetData'
+    ConfigValueDeletedData:
+      $ref: './schemas/responses.yaml#/ConfigValueDeletedData'
+
+    # Error schemas
+    BadRequestError:
+      $ref: './schemas/errors.yaml#/BadRequestError'
+    NotFoundError:
+      $ref: './schemas/errors.yaml#/NotFoundError'
+    GoneError:
+      $ref: './schemas/errors.yaml#/GoneError'
+    InternalServerError:
+      $ref: './schemas/errors.yaml#/InternalServerError'
+    ServiceUnavailableError:
+      $ref: './schemas/errors.yaml#/ServiceUnavailableError'
+
+  parameters:
+    ConfigName:
+      $ref: './parameters/path.yaml#/ConfigName'
+    Timestamp:
+      $ref: './parameters/path.yaml#/Timestamp'
+
+  securitySchemes:
+    # Placeholder for future authentication
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key authentication (not yet implemented)
+
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT bearer token authentication (not yet implemented)
+
+# Security is not currently enforced but defined for future use
+security: []
+
+x-cqrs-architecture:
+  write-path:
+    - Command validation by aggregates
+    - Event generation (ConfigValueSet, ConfigValueDeleted)
+    - Event persistence to EventStore (PostgreSQL)
+    - Synchronous projection update
+  read-path:
+    - Query projection (ETS table)
+    - Query EventStore for history/time-travel
+  consistency: immediate
+  projection-update: synchronous

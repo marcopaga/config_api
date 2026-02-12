@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://config-api.example.com/schemas/events/config-value-deleted.json",
+  "title": "ConfigValueDeleted Event",
+  "description": "Event emitted when a configuration is deleted. Creates a tombstone marker. Part of the CQRS write path.",
+  "type": "object",
+  "required": [
+    "config_name",
+    "deleted_value",
+    "timestamp"
+  ],
+  "properties": {
+    "config_name": {
+      "type": "string",
+      "description": "The unique identifier for the configuration being deleted",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "examples": [
+        "api_key",
+        "database_url",
+        "feature_flag_enabled"
+      ]
+    },
+    "deleted_value": {
+      "type": "string",
+      "description": "The value that was deleted (preserved for audit trail)",
+      "minLength": 0,
+      "maxLength": 1000000,
+      "examples": [
+        "secret123",
+        "postgresql://localhost/mydb",
+        ""
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when the value was deleted",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$",
+      "examples": [
+        "2024-01-15T10:30:00.123456Z",
+        "2024-01-15T10:30:00Z"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "x-elixir-module": "ConfigApi.Events.ConfigValueDeleted",
+  "x-elixir-struct": true,
+  "x-event-category": "configuration",
+  "x-aggregate": "ConfigValue",
+  "x-cqrs-pattern": "event",
+  "x-creates-tombstone": true,
+  "x-business-rules": {
+    "audit-trail": "deleted_value is preserved for audit purposes",
+    "tombstone": "Creates a tombstone marker in the projection",
+    "no-double-delete": "Cannot delete an already deleted configuration (enforced by aggregate)",
+    "resurrection": "Deleted configurations can be set again with PUT"
+  },
+  "examples": [
+    {
+      "config_name": "api_key",
+      "deleted_value": "secret123",
+      "timestamp": "2024-01-15T12:00:00.123456Z",
+      "$comment": "Standard deletion"
+    },
+    {
+      "config_name": "optional_setting",
+      "deleted_value": "",
+      "timestamp": "2024-01-15T13:00:00.123456Z",
+      "$comment": "Deleting a configuration with empty string value"
+    }
+  ]
+}

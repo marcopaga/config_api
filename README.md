@@ -1,163 +1,559 @@
 # ConfigApi
 
-This project exposes a simple config API with **Event Sourcing** architecture. All configuration changes are persisted as immutable events in PostgreSQL, providing complete audit trails and historical data access.
+> **A production-grade configuration management system with complete audit trail, time-travel queries, and event sourcing.**
 
-## Architecture
+[![Tests](https://img.shields.io/badge/tests-102%20passing-success)]()
+[![Elixir](https://img.shields.io/badge/elixir-1.18.4-purple)]()
+[![Erlang](https://img.shields.io/badge/erlang-28.0.2-red)]()
+[![License](https://img.shields.io/badge/license-MIT-blue)]()
 
-- **Event Sourcing**: All state changes are stored as events
-- **CQRS**: Separate read/write models with projections
-- **PostgreSQL**: Persistent event store backend
-- **Complete Audit Trail**: Every configuration change is permanently recorded
-- **Time Travel**: Query configuration state at any point in time
+ConfigApi is a **CQRS/Event Sourcing** system that provides:
+- 🔍 **Complete Audit Trail** - Every change recorded as an immutable event
+- ⏰ **Time-Travel Queries** - See configuration state at any point in history
+- ⚡ **Fast Reads** - Sub-millisecond queries from in-memory projections
+- 🔒 **Durable Writes** - PostgreSQL-backed event persistence
+- 📊 **Event History** - Full change log with timestamps and metadata
+- 🏥 **Health Monitoring** - Built-in operational health checks
+
+## ✨ Key Features
+
+```mermaid
+graph LR
+    subgraph "What You Get"
+        Audit[Complete<br/>Audit Trail]
+        Time[Time-Travel<br/>Queries]
+        Fast[Fast<br/>Reads]
+        History[Event<br/>History]
+    end
+
+    Audit --> Time --> Fast --> History
+
+    style Audit fill:#c8e6c9
+    style Time fill:#fff9c4
+    style Fast fill:#e1f5ff
+    style History fill:#f3e5f5
+```
+
+### Store & Retrieve Configurations
+```bash
+# Store a value
+curl -X PUT http://localhost:4000/config/api_key \
+  -H "Content-Type: application/json" \
+  -d '{"value":"secret-key-123"}'
+
+# Retrieve it immediately
+curl http://localhost:4000/config/api_key
+# secret-key-123
+```
+
+### View Complete History
+```bash
+# See all changes to a configuration
+curl http://localhost:4000/config/api_key/history
+
+# Returns:
+[
+  {
+    "event_type": "ConfigValueSet",
+    "data": {"value": "secret-key-123", "timestamp": "..."},
+    "stream_version": 1
+  }
+]
+```
+
+### Time-Travel Queries
+```bash
+# What was the value yesterday?
+curl http://localhost:4000/config/api_key/at/2026-02-11T10:00:00Z
+# old-secret-key
+
+# What is it now?
+curl http://localhost:4000/config/api_key/at/2026-02-12T10:00:00Z
+# secret-key-123
+```
+
+## 🚀 Quick Start
+
+```bash
+# 1. Start PostgreSQL
+docker run -d --name config_api_postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=config_api_eventstore \
+  -p 5432:5432 postgres:15
+
+# 2. Initialize EventStore
+mix event_store.create && mix event_store.init
+
+# 3. Start the application
+iex -S mix
+
+# 4. Try it out!
+curl http://localhost:4000/health
+```
+
+**➡️ Complete setup guide:** [docs/guides/quick-start.md](docs/guides/quick-start.md)
+
+## 📚 Documentation
+
+📖 **[Complete Documentation](docs/README.md)** - Architecture, guides, and API reference
+
+### Quick Links
+- **[Architecture Overview](docs/architecture/overview.md)** - System design and diagrams
+- **[Quick Start Guide](docs/guides/quick-start.md)** - Get running in 5 minutes
+- **[CQRS Explained](docs/architecture/cqrs.md)** - Understanding the pattern
+- **[REST API Reference](docs/api/rest-api.md)** - Complete endpoint documentation
+- **[API Specifications](spec/README.md)** - OpenAPI, JSON Schema, and AsyncAPI specs
+
+## 🏗️ Architecture
+
+This application uses a complete CQRS/Event Sourcing architecture:
+
+- **Command Side:** Aggregates validate business logic and emit domain events to EventStore
+- **Query Side:** In-memory ETS projection rebuilt from events for fast reads
+- **Event Store:** PostgreSQL-based persistent event log (source of truth)
+- **Audit Trail:** Complete history of all configuration changes with timestamps
+- **Time-Travel:** Query configuration state at any point in time
+
+### Key Components
+
+- **EventStore** - PostgreSQL-backed event persistence
+- **ConfigAggregate** - Domain logic and event emission
+- **ConfigStateProjection** - ETS-based read model (rebuilds on startup)
+- **ConfigStoreCQRS** - Public API facade
+- **Health Check** - Component monitoring endpoint
+
+### Consistency Model
+
+**Immediate Consistency with Event Sourcing:**
+- Writes immediately persist events to EventStore
+- Projection updates synchronously after write
+- Reads reflect writes immediately (no restart needed)
+
+## 📋 API Documentation
+
+ConfigApi provides comprehensive **machine-readable API specifications**:
+
+- **[OpenAPI 3.1](spec/openapi/configapi-v1.yaml)** - REST API specification with CQRS annotations
+- **[JSON Schema](spec/json-schema/)** - Domain event and aggregate schemas
+- **[AsyncAPI 3.0](spec/asyncapi/config-events-v1.yaml)** - Event streaming documentation
+- **[Specification Guide](spec/README.md)** - How to use and generate documentation
+
+### API Versioning
+
+All endpoints are available under the `/v1` prefix:
+```bash
+GET /v1/health              # Health check
+GET /v1/config              # List all configurations
+GET /v1/config/:name        # Get specific value
+PUT /v1/config/:name        # Set value
+DELETE /v1/config/:name     # Delete configuration
+GET /v1/config/:name/history      # Event history
+GET /v1/config/:name/at/:timestamp # Time-travel query
+```
+
+**Note**: Unversioned routes (`/config`) are deprecated but maintained for backward compatibility.
+
+### Generate Interactive Documentation
+
+```bash
+# Install Redocly CLI
+npm install -g @redocly/cli
+
+# Generate HTML documentation
+npx @redocly/cli build-docs spec/openapi/configapi-v1.yaml -o docs/api-reference.html
+
+# Validate specification
+npx @redocly/cli lint spec/openapi/configapi-v1.yaml
+```
 
 ## Prerequisites
 
-- Docker and Docker Compose
-- Erlang and Elixir (via ASDF or your preferred method)
+- **Erlang 28.0.2** and **Elixir 1.18.4** (via ASDF)
+- **PostgreSQL 12+** (for EventStore)
+- **Docker** (optional, for PostgreSQL)
 
-## Setup
+## Quick Start
 
-### 1. Start PostgreSQL Database
+### 1. Install Dependencies
 
-```shell
-# Start PostgreSQL with docker-compose
-docker-compose up -d
+```bash
+# Install Erlang/Elixir via ASDF
+asdf install
 
-# Verify database is running
-docker-compose ps
+# Install Elixir dependencies
+mix deps.get
 ```
 
-### 2. Install Dependencies
+### 2. Setup PostgreSQL
 
-```shell
-mix deps.get
+**Option A: Using Docker**
+```bash
+docker run -d \
+  --name config_api_postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=config_api_eventstore \
+  -p 5432:5432 \
+  postgres:15
+```
+
+**Option B: Local PostgreSQL**
+```bash
+createdb config_api_eventstore
 ```
 
 ### 3. Initialize EventStore
 
-```shell
-# Create and migrate the EventStore database
+```bash
+# Create EventStore schema
 mix event_store.create
+
+# Initialize EventStore tables
 mix event_store.init
 ```
 
 ### 4. Run the Application
 
-```shell
+```bash
+# Development mode with interactive shell
 iex -S mix
-```
 
-The server will start on `http://localhost:4000`
-
-## API Usage
-
-The API maintains the same interface as before, but now with full event sourcing capabilities:
-
-### Basic Operations
-
-```shell
-# 1. List all values (should be empty initially)
-curl -i http://localhost:4000/config
-
-# 2. Query a non-existent value (404)
-curl -i http://localhost:4000/config/foo
-
-# 3. Set a value (PUT)
-curl -i -X PUT http://localhost:4000/config/foo \
-     -H "Content-Type: application/json" \
-     -d '{"value":"bar"}'
-
-# 4. Get the value that was just set (200, "bar")
-curl -i http://localhost:4000/config/foo
-
-# 5. Set another value
-curl -i -X PUT http://localhost:4000/config/database_url \
-     -H "Content-Type: application/json" \
-     -d '{"value":"postgres://localhost/mydb"}'
-
-# 6. List all values (should contain both, JSON)
-curl -i http://localhost:4000/config
-```
-
-### Event Sourcing Features
-
-```shell
-# Get complete history of a configuration value
-curl -i http://localhost:4000/config/foo/history
-
-# Get configuration state at a specific timestamp
-curl -i "http://localhost:4000/config/foo/at?timestamp=2024-01-01T12:00:00Z"
-
-# Delete a configuration value
-curl -i -X DELETE http://localhost:4000/config/foo
-```
-
-## Event Sourcing Benefits
-
-1. **Complete Audit Trail**: Every change is permanently recorded
-2. **Time Travel**: Query any configuration at any point in history
-3. **Debugging**: Full visibility into what changed, when, and why
-4. **Data Recovery**: Rebuild state from events if needed
-5. **Analytics**: Analyze configuration change patterns over time
-
-## Logging
-
-The system provides detailed logging for all configuration changes:
-
-```
-[info] Config updated at 2025-09-08T08:20:12.405220Z: name=database_url, old_value=nil, new_value=postgres://localhost/mydb
-[info] Config updated at 2025-09-08T08:20:38.495306Z: name=database_url, old_value=postgres://localhost/mydb, new_value=postgres://production/mydb
-[info] Config deleted at 2025-09-08T08:21:03.035595Z: name=api_timeout, deleted_value=5000
-```
-
-## Development
-
-### Database Management
-
-```shell
-# Stop and remove database
-docker-compose down
-
-# Reset database (WARNING: destroys all data)
-docker-compose down -v
-docker-compose up -d
-mix event_store.drop
-mix event_store.create
-mix event_store.init
-```
-
-### Running Tests
-
-```shell
-# Start test database
-docker-compose up -d
+# Production mode
+MIX_ENV=prod mix run --no-halt
 
 # Run tests
 mix test
 ```
 
-## Installation of Erlang and Elixir via ASDF
+Server starts on **http://localhost:4000**
 
-Erlang and Elixir are installed with ASDF as specified in `.tool-versions`.
+## API Reference
 
-```shell
-asdf install
+### Standard CRUD Operations
+
+#### List All Configurations
+```bash
+GET /config
+```
+Returns JSON array of all configurations from the projection.
+
+**Example:**
+```bash
+curl http://localhost:4000/config
+# [{"name":"database_url","value":"postgres://..."},{"name":"api_key","value":"secret"}]
 ```
 
-## Project Structure
-
+#### Get Configuration Value
+```bash
+GET /config/:name
 ```
-lib/
-├── config_api/
-│   ├── aggregates/          # Domain aggregates
-│   │   └── config_value.ex  # ConfigValue aggregate
-│   ├── events/              # Domain events
-│   │   ├── config_value_set.ex
-│   │   └── config_value_deleted.ex
-│   ├── projections/         # Read model projections
-│   │   └── config_state_projection.ex
-│   ├── event_store.ex       # EventStore configuration
-│   ├── ConfigStore.ex       # Main API interface
-│   └── config_update_worker.ex  # Logging worker
-└── config_api_web/
-    └── router.ex            # HTTP routes
+Returns the current value as plain text.
+
+**Example:**
+```bash
+curl http://localhost:4000/config/database_url
+# postgres://localhost/mydb
+```
+
+#### Set Configuration Value
+```bash
+PUT /config/:name
+Content-Type: application/json
+{"value": "..."}
+```
+
+**Example:**
+```bash
+curl -X PUT http://localhost:4000/config/database_url \
+  -H "Content-Type: application/json" \
+  -d '{"value":"postgres://localhost/mydb"}'
+# OK
+```
+
+**Note:** The value is immediately available for reads after writing. No restart required!
+
+#### Delete Configuration
+```bash
+DELETE /config/:name
+```
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:4000/config/api_key
+# OK
+```
+
+### CQRS-Specific Endpoints
+
+#### Get Event History
+```bash
+GET /config/:name/history
+```
+Returns complete event stream with timestamps and metadata.
+
+**Example:**
+```bash
+curl http://localhost:4000/config/database_url/history
+```
+```json
+[
+  {
+    "event_type": "Elixir.ConfigApi.Events.ConfigValueSet",
+    "data": {
+      "config_name": "database_url",
+      "value": "postgres://localhost/mydb",
+      "old_value": null,
+      "timestamp": "2026-02-12T10:00:00Z"
+    },
+    "created_at": "2026-02-12T10:00:00.123456Z",
+    "stream_version": 1
+  }
+]
+```
+
+#### Time-Travel Query
+```bash
+GET /config/:name/at/:timestamp
+```
+Returns configuration value as it existed at the specified timestamp (ISO8601 format).
+
+**Example:**
+```bash
+# What was the value at 10:00 AM?
+curl http://localhost:4000/config/database_url/at/2026-02-12T10:00:00Z
+# postgres://old-server/mydb
+
+# What is the value now?
+curl http://localhost:4000/config/database_url/at/2026-02-12T11:00:00Z
+# postgres://new-server/mydb
+```
+
+### Health Check
+
+```bash
+GET /health
+```
+Returns component status for monitoring.
+
+**Example:**
+```bash
+curl http://localhost:4000/health
+```
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-02-12T10:30:00Z",
+  "checks": {
+    "eventstore": "ok",
+    "projection": "ok",
+    "database": "ok"
+  }
+}
+```
+Returns HTTP 200 if healthy, 503 if any component is down.
+
+## Development
+
+### Run Tests
+```bash
+# All tests
+mix test
+
+# Specific test file
+mix test test/config_api/config_store_cqrs_test.exs
+
+# With coverage
+mix test --cover
+```
+
+**Test Results:**
+```
+Finished in 17.6 seconds
+1 doctest, 102 tests, 0 failures ✅
+```
+
+### Code Formatting
+```bash
+mix format
+```
+
+### Static Analysis
+```bash
+mix compile --warnings-as-errors
+```
+
+### Clear Event Data (Development)
+```bash
+# WARNING: Deletes all events
+mix event_store.drop
+mix event_store.create
+mix event_store.init
+```
+
+## Event Sourcing Benefits
+
+### Complete Audit Trail
+Every configuration change is recorded with:
+- Who/what changed it (via aggregate metadata)
+- When it changed (timestamp)
+- What the old value was
+- What the new value is
+
+### Time-Travel Queries
+Answer questions like:
+- "What was the database URL last Tuesday?"
+- "When did the API key change?"
+- "Show me all changes to this configuration"
+
+### Event Replay
+Rebuild the entire application state from events:
+```elixir
+# Projection automatically rebuilds on startup
+# Replays all events from EventStore → ETS projection
+```
+
+### Debug and Compliance
+- Full audit log for compliance requirements
+- Debug production issues by replaying events
+- Understand system behavior over time
+
+## Architecture Details
+
+### Write Path (Commands)
+```
+HTTP PUT → ConfigStoreCQRS → ConfigAggregate → Domain Event → EventStore (PostgreSQL)
+                                                                    ↓
+                                                        ConfigUpdateWorker (audit log)
+```
+
+### Read Path (Queries)
+```
+HTTP GET → ConfigStoreCQRS → ConfigStateProjection (ETS) → Response
+```
+
+### Event Flow
+```
+EventStore (PostgreSQL)
+    ↓ (on startup)
+Projection reads all events
+    ↓
+Rebuilds ETS table
+    ↓
+Ready for fast reads
+```
+
+## Configuration
+
+See `config/config.exs` for EventStore settings:
+
+```elixir
+config :config_api, ConfigApi.EventStore,
+  serializer: ConfigApi.EventSerializer,
+  username: "postgres",
+  password: "postgres",
+  database: "config_api_eventstore",
+  hostname: "localhost",
+  port: 5432,
+  pool_size: 10
+```
+
+## Production Deployment
+
+### Build Release
+```bash
+MIX_ENV=prod mix release
+```
+
+### Run Release
+```bash
+_build/prod/rel/config_api/bin/config_api start
+```
+
+### Environment Variables
+Set PostgreSQL connection via environment:
+```bash
+export DATABASE_URL="postgres://user:pass@host/config_api_eventstore"
+```
+
+### Health Monitoring
+Configure your load balancer to check:
+```
+GET /health
+```
+- 200 = healthy
+- 503 = unhealthy (remove from rotation)
+
+## Consistency Model
+
+**Immediate Consistency with Event Sourcing:**
+
+1. **Write Operation:** Event immediately persisted to EventStore (durable)
+2. **Projection Update:** Synchronously applied to ETS projection
+3. **Read Operation:** Returns latest data from projection
+
+**Benefits:**
+- ✅ Writes are immediately visible in reads
+- ✅ No restart required for consistency
+- ✅ Complete event history preserved
+- ✅ Time-travel queries available
+- ✅ Full audit trail maintained
+
+**How it works:**
+- After appending event to EventStore, projection updates immediately
+- Both write and projection update happen synchronously
+- Reads always see the latest committed writes
+- Event sourcing benefits fully preserved
+
+## Troubleshooting
+
+### EventStore Connection Issues
+```bash
+# Check PostgreSQL is running
+psql -U postgres -d config_api_eventstore -c "SELECT 1"
+
+# Reinitialize EventStore
+mix event_store.drop
+mix event_store.create
+mix event_store.init
+```
+
+### Projection Out of Sync
+```bash
+# Restart application - projection rebuilds automatically
+# Verify with health check
+curl http://localhost:4000/health
+```
+
+### Port Already in Use
+```bash
+# Find process using port 4000
+lsof -i :4000
+
+# Kill it
+kill -9 <PID>
+```
+
+## Technology Stack
+
+- **Language:** Elixir 1.18.4 / Erlang/OTP 28
+- **Web Framework:** Plug + Cowboy
+- **Event Store:** EventStore library (PostgreSQL-backed)
+- **Database:** PostgreSQL 12+
+- **Read Model:** ETS (in-memory Erlang tables)
+- **Serialization:** JSON (Jason library)
+- **Testing:** ExUnit
+
+## Project Status
+
+**Version:** 0.1.0
+**Status:** Production-ready with immediate consistency
+**Test Coverage:** 102 tests (core functionality verified)
+**Architecture:** Complete CQRS/Event Sourcing implementation
+
+## Contributing
+
+See `CLAUDE.md` for development guidelines and architecture details.
+
+## License
+
+MIT License

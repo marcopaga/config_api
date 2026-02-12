@@ -1,6 +1,6 @@
 import Config
 
-# Configure EventStore for testing
+# Test-specific EventStore config (separate database)
 config :config_api, ConfigApi.EventStore,
   serializer: EventStore.JsonSerializer,
   username: "postgres",
@@ -10,5 +10,5 @@ config :config_api, ConfigApi.EventStore,
   port: 5432,
   pool_size: 1
 
-# Disable logging during tests
-config :logger, level: :warning
+# Keep logger level for tests
+config :logger, level: :info

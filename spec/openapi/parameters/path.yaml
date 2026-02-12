@@ -1,0 +1,77 @@
+ConfigName:
+  name: name
+  in: path
+  required: true
+  description: |
+    The configuration name (unique identifier).
+
+    **Naming conventions**:
+    - Typically uses lowercase with underscores (e.g., `api_key`, `database_url`)
+    - Can contain alphanumeric characters and underscores
+    - Must be URL-safe
+
+    **Examples**:
+    - `api_key`
+    - `database_url`
+    - `feature_flag_enabled`
+    - `max_connections`
+  schema:
+    type: string
+    pattern: '^[a-zA-Z0-9_-]+$'
+    minLength: 1
+    maxLength: 100
+    examples:
+      - "api_key"
+      - "database_url"
+      - "feature_flag_enabled"
+  examples:
+    simple:
+      value: "api_key"
+      summary: Simple configuration name
+    feature_flag:
+      value: "feature_flag_enabled"
+      summary: Feature flag configuration
+    database:
+      value: "database_url"
+      summary: Database connection string
+
+Timestamp:
+  name: timestamp
+  in: path
+  required: true
+  description: |
+    ISO8601 timestamp for time-travel queries.
+
+    **Format**: ISO8601 date-time with optional microseconds
+    - `YYYY-MM-DDTHH:MM:SSZ` (UTC, no microseconds)
+    - `YYYY-MM-DDTHH:MM:SS.SSSSSSZ` (UTC, with microseconds)
+    - `YYYY-MM-DDTHH:MM:SS+00:00` (UTC with timezone)
+
+    **Time-travel behavior**:
+    - Returns the configuration value as it existed at the specified timestamp
+    - Events are replayed up to and including the timestamp
+    - If no events exist before timestamp, returns 404
+    - If configuration was deleted before timestamp, returns 404
+
+    **Examples**:
+    - `2024-01-15T10:30:00Z`
+    - `2024-01-15T10:30:00.123456Z`
+    - `2024-01-15T10:30:00+00:00`
+  schema:
+    type: string
+    format: date-time
+    pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$'
+    examples:
+      - "2024-01-15T10:30:00Z"
+      - "2024-01-15T10:30:00.123456Z"
+      - "2024-01-15T10:30:00+00:00"
+  examples:
+    basic:
+      value: "2024-01-15T10:30:00Z"
+      summary: UTC timestamp without microseconds
+    microseconds:
+      value: "2024-01-15T10:30:00.123456Z"
+      summary: UTC timestamp with microseconds
+    timezone:
+      value: "2024-01-15T10:30:00+00:00"
+      summary: UTC timestamp with timezone offset

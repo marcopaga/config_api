@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://config-api.example.com/schemas/aggregates/config-value.json",
+  "title": "ConfigValue Aggregate State",
+  "description": "Aggregate root for configuration values. Encapsulates business logic and state transitions in the CQRS write path.",
+  "type": "object",
+  "required": [
+    "name",
+    "version",
+    "deleted"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The unique identifier for this configuration (aggregate ID)",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "examples": [
+        "api_key",
+        "database_url",
+        "feature_flag_enabled"
+      ]
+    },
+    "value": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The current value (null if never set or deleted)",
+      "examples": [
+        "production",
+        "https://api.example.com",
+        null,
+        ""
+      ]
+    },
+    "version": {
+      "type": "integer",
+      "description": "Event stream version (number of events applied)",
+      "minimum": 0,
+      "examples": [
+        0,
+        1,
+        5
+      ]
+    },
+    "deleted": {
+      "type": "boolean",
+      "description": "Whether this configuration is currently deleted (tombstone state)",
+      "examples": [
+        false,
+        true
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "x-elixir-module": "ConfigApi.Aggregates.ConfigValue",
+  "x-elixir-struct": true,
+  "x-aggregate-root": true,
+  "x-cqrs-pattern": "aggregate",
+  "x-state-transitions": {
+    "new": {
+      "description": "Initial state before any events",
+      "state": {
+        "name": "config_name",
+        "value": null,
+        "version": 0,
+        "deleted": false
+      }
+    },
+    "after-set": {
+      "description": "State after ConfigValueSet event applied",
+      "state": {
+        "value": "updated to event value",
+        "version": "incremented",
+        "deleted": false
+      }
+    },
+    "after-delete": {
+      "description": "State after ConfigValueDeleted event applied",
+      "state": {
+        "value": null,
+        "version": "incremented",
+        "deleted": true
+      }
+    },
+    "after-resurrection": {
+      "description": "State after setting a deleted configuration",
+      "state": {
+        "value": "new value",
+        "version": "incremented",
+        "deleted": false
+      }
+    }
+  },
+  "x-business-rules": [
+    {
+      "rule": "idempotent-set",
+      "description": "Allows setting the same value multiple times",
+      "enforcement": "No validation against current value"
+    },
+    {
+      "rule": "resurrection",
+      "description": "Allows setting a value after deletion",
+      "enforcement": "SET command succeeds even when deleted=true"
+    },
+    {
+      "rule": "no-double-delete",
+      "description": "Cannot delete an already deleted configuration",
+      "enforcement": "DELETE command fails when deleted=true (returns error)"
+    },
+    {
+      "rule": "empty-values",
+      "description": "Empty strings are valid values",
+      "enforcement": "No minimum length validation on value"
+    }
+  ],
+  "x-commands": [
+    {
+      "command": "SetValue",
+      "generates": "ConfigValueSet event",
+      "validation": "None (always succeeds)",
+      "state-change": "Sets value, clears deleted flag"
+    },
+    {
+      "command": "Delete",
+      "generates": "ConfigValueDeleted event",
+      "validation": "Fails if already deleted or never existed",
+      "state-change": "Clears value, sets deleted flag"
+    }
+  ],
+  "examples": [
+    {
+      "name": "api_key",
+      "value": null,
+      "version": 0,
+      "deleted": false,
+      "$comment": "Initial state - no events applied"
+    },
+    {
+      "name": "api_key",
+      "value": "secret123",
+      "version": 1,
+      "deleted": false,
+      "$comment": "After first set event"
+    },
+    {
+      "name": "api_key",
+      "value": "secret456",
+      "version": 2,
+      "deleted": false,
+      "$comment": "After update event"
+    },
+    {
+      "name": "api_key",
+      "value": null,
+      "version": 3,
+      "deleted": true,
+      "$comment": "After delete event (tombstone)"
+    },
+    {
+      "name": "api_key",
+      "value": "secret789",
+      "version": 4,
+      "deleted": false,
+      "$comment": "After resurrection event"
+    }
+  ]
+}
