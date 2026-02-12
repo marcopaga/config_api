@@ -20,19 +20,15 @@ defmodule ConfigApiWeb.Router do
 
   # Standard CRUD endpoints (migrated to CQRS)
 
-  @doc """
-  GET /config - List all configurations
-  Returns JSON array of {name, value} objects
-  """
+  # GET /config - List all configurations
+  # Returns JSON array of {name, value} objects
   get "/config" do
     configs = ConfigStoreCQRS.all()
     send_resp(conn, 200, Jason.encode!(configs))
   end
 
-  @doc """
-  GET /config/:name - Get a specific configuration value
-  Returns plain text value or 404
-  """
+  # GET /config/:name - Get a specific configuration value
+  # Returns plain text value or 404
   get "/config/:name" do
     case ConfigStoreCQRS.get(name) do
       {:ok, value} ->
@@ -43,10 +39,8 @@ defmodule ConfigApiWeb.Router do
     end
   end
 
-  @doc """
-  PUT /config/:name - Set a configuration value
-  Expects JSON body: {"value": "..."}
-  """
+  # PUT /config/:name - Set a configuration value
+  # Expects JSON body: {"value": "..."}
   put "/config/:name" do
     value = conn.body_params["value"]
 
@@ -60,9 +54,7 @@ defmodule ConfigApiWeb.Router do
     end
   end
 
-  @doc """
-  DELETE /config/:name - Delete a configuration
-  """
+  # DELETE /config/:name - Delete a configuration
   delete "/config/:name" do
     case ConfigStoreCQRS.delete(name) do
       :ok ->
@@ -82,10 +74,8 @@ defmodule ConfigApiWeb.Router do
 
   # CQRS-specific endpoints (new functionality)
 
-  @doc """
-  GET /config/:name/history - Get complete event history for a configuration
-  Returns JSON array of events with timestamps and metadata
-  """
+  # GET /config/:name/history - Get complete event history for a configuration
+  # Returns JSON array of events with timestamps and metadata
   get "/config/:name/history" do
     case ConfigStoreCQRS.get_history(name) do
       {:ok, history} ->
@@ -97,11 +87,9 @@ defmodule ConfigApiWeb.Router do
     end
   end
 
-  @doc """
-  GET /config/:name/at/:timestamp - Get configuration value at a specific point in time
-  Timestamp format: ISO8601 (e.g., 2024-01-15T10:30:00Z)
-  Returns plain text value or 404
-  """
+  # GET /config/:name/at/:timestamp - Get configuration value at a specific point in time
+  # Timestamp format: ISO8601 (e.g., 2024-01-15T10:30:00Z)
+  # Returns plain text value or 404
   get "/config/:name/at/:timestamp" do
     case parse_timestamp(timestamp) do
       {:ok, datetime} ->

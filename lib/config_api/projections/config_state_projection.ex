@@ -167,21 +167,12 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
     end
   end
 
-  defp subscribe_to_events do
-    case ConfigApi.EventStore.subscribe_to_all_streams(
-           "config_state_projection",
-           self(),
-           start_from: :origin
-         ) do
-      {:ok, subscription} ->
-        send(self(), {:subscribed, subscription})
-        :ok
-
-      {:error, reason} ->
-        Logger.error("Failed to subscribe to events: #{inspect(reason)}")
-        :ok
-    end
-  end
+  # NOTE: Event subscriptions are disabled due to deserialization issues
+  # The projection rebuilds from events on startup, which is sufficient for current needs
+  # To re-enable subscriptions in the future:
+  # 1. Fix atom deserialization in EventStore notification publisher
+  # 2. Uncomment the subscribe_to_events call in init/1
+  # 3. Uncomment this function and the handle_info({:subscribed, _}, state) callback
 
   defp apply_event(%ConfigValueSet{config_name: name, value: value}) do
     :ets.insert(@table_name, {name, value})
