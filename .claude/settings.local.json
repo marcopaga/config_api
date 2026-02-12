@@ -17,7 +17,12 @@
       "Bash(iex -S mix:*)",
       "Bash(elixir:*)",
       "Bash(curl:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(MIX_ENV=dev mix compile:*)",
+      "Bash(MIX_ENV=dev iex -S mix:*)",
+      "Bash(MIX_ENV=dev mix run:*)",
+      "Bash(lsof:*)",
+      "Bash(python3:*)"
     ]
   },
   "sandbox": {
