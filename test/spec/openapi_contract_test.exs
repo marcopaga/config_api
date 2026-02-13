@@ -17,10 +17,13 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
   # Wait for process to fully terminate
   defp wait_for_process_stop(name, retries \\ 20) do
     case Process.whereis(name) do
-      nil -> :ok
+      nil ->
+        :ok
+
       _pid when retries > 0 ->
         Process.sleep(10)
         wait_for_process_stop(name, retries - 1)
+
       _pid ->
         # Process didn't stop, but proceed anyway
         :ok
@@ -38,6 +41,7 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
       :exit, _ when retries > 0 ->
         Process.sleep(10)
         wait_for_projection_ready(pid, retries - 1)
+
       :exit, _ ->
         # Timeout, but proceed
         :ok

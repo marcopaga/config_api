@@ -30,13 +30,16 @@ defmodule ConfigApi.EventStoreCase do
     config = EventStore.config()
 
     # Reuse connection from EventStore if possible
-    conn_pid = case get_or_create_test_connection(config) do
-      {:ok, pid} -> pid
-      {:error, _} ->
-        # Fallback: create temporary connection
-        {:ok, pid} = Postgrex.start_link(config)
-        pid
-    end
+    conn_pid =
+      case get_or_create_test_connection(config) do
+        {:ok, pid} ->
+          pid
+
+        {:error, _} ->
+          # Fallback: create temporary connection
+          {:ok, pid} = Postgrex.start_link(config)
+          pid
+      end
 
     # Truncate all EventStore tables in a single statement
     Postgrex.query!(
