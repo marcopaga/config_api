@@ -1,11 +1,25 @@
 defmodule ConfigApi.Projections.ConfigStateProjectionTest do
-  use ExUnit.Case, async: false
+  @moduledoc """
+  Integration tests for ConfigStateProjection with real EventStore.
+
+  Tests the projection's ability to rebuild from EventStore and subscribe to events.
+  Tagged :integration - requires Docker.
+
+  Run with: mix test --only integration
+
+  Unit tests (event application logic) are in config_state_projection_unit_test.exs
+  """
+  use ConfigApi.EventStoreCase, async: false
+
+  @moduletag :integration
 
   alias ConfigApi.Projections.ConfigStateProjection
   alias ConfigApi.Events.{ConfigValueSet, ConfigValueDeleted}
 
   # Stop the application's projection if running
   setup do
+    # First, EventStore is reset by EventStoreCase
+
     # Stop the application's projection to avoid conflicts
     case Process.whereis(ConfigStateProjection) do
       nil -> :ok

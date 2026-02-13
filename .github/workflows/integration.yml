@@ -10,8 +10,91 @@ permissions:
   contents: read
 
 jobs:
-  integration-tests:
-    name: Integration tests
+  # E2E integration tests with mix test
+  elixir-integration-tests:
+    name: Elixir integration tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: config_api_eventstore_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1.18.2
+        with:
+          elixir-version: '1.18.4'
+          otp-version: '28.0.2'
+
+      - name: Restore dependencies cache
+        uses: actions/cache@b7e8d49f17405cc70c1c120101943203c98d3a4b # v4
+        with:
+          path: |
+            deps
+            _build/test
+          key: ${{ runner.os }}-mix-otp28-elixir1.18-test-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-otp28-elixir1.18-test-
+            ${{ runner.os }}-mix-otp28-elixir1.18-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile
+        run: mix compile
+        env:
+          MIX_ENV: test
+
+      - name: Initialize EventStore
+        run: |
+          mix event_store.create
+          mix event_store.init
+        env:
+          MIX_ENV: test
+          EVENTSTORE_HOST: localhost
+          EVENTSTORE_PORT: 5432
+          EVENTSTORE_DATABASE: config_api_eventstore_test
+          EVENTSTORE_USERNAME: postgres
+          EVENTSTORE_PASSWORD: postgres
+
+      - name: Run integration tests
+        run: mix test --only integration --max-cases 1
+        env:
+          MIX_ENV: test
+          EVENTSTORE_HOST: localhost
+          EVENTSTORE_PORT: 5432
+          EVENTSTORE_DATABASE: config_api_eventstore_test
+          EVENTSTORE_USERNAME: postgres
+          EVENTSTORE_PASSWORD: postgres
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: elixir-integration-test-results
+          path: |
+            **/*.log
+            _build/test/**/*.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # HTTP API integration tests
+  http-integration-tests:
+    name: HTTP API integration tests
     runs-on: ubuntu-latest
 
     services:
@@ -44,10 +127,11 @@ jobs:
         with:
           path: |
             deps
-            _build
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+            _build/dev
+          key: ${{ runner.os }}-mix-otp28-elixir1.18-dev-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-
+            ${{ runner.os }}-mix-otp28-elixir1.18-dev-
+            ${{ runner.os }}-mix-otp28-elixir1.18-
 
       - name: Install dependencies
         run: mix deps.get
@@ -91,7 +175,7 @@ jobs:
           while [ $attempt -lt $max_attempts ]; do
             if curl -s http://localhost:4000/v1/health > /dev/null 2>&1; then
               echo "Server is ready!"
-              curl -s http://localhost:4000/v1/health | head -20
+              curl -s http://localhost:4000/v1/health
               exit 0
             fi
 
@@ -103,7 +187,7 @@ jobs:
           echo "Server failed to start within expected time"
           exit 1
 
-      - name: Run integration tests
+      - name: Run HTTP integration tests
         run: ./scripts/integration_test.sh http://localhost:4000
 
       - name: Stop server
@@ -118,9 +202,9 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
         with:
-          name: server-logs
+          name: http-integration-server-logs
           path: |
-            _build/dev/lib/config_api/
-            *.log
+            **/*.log
+            _build/dev/**/*.log
           retention-days: 7
           if-no-files-found: ignore

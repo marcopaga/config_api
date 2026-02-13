@@ -15,25 +15,10 @@ permissions:
   contents: read
 
 jobs:
-  build:
-
-    name: Build and test
+  # Fast unit tests without database (2-3 seconds)
+  unit-tests:
+    name: Unit tests (fast)
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:14-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: config_api_eventstore
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
 
     steps:
     - name: Checkout code
@@ -50,10 +35,12 @@ jobs:
       with:
         path: |
           deps
-          _build
-        key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          _build/test
+        key: ${{ runner.os }}-mix-otp28-elixir1.18-test-${{ hashFiles('**/mix.lock') }}
         restore-keys: |
-          ${{ runner.os }}-mix-
+          ${{ runner.os }}-mix-otp28-elixir1.18-test-
+          ${{ runner.os }}-mix-otp28-elixir1.18-
+
     - name: Install dependencies
       run: mix deps.get
 
@@ -65,32 +52,18 @@ jobs:
       env:
         MIX_ENV: test
 
-    - name: Initialize EventStore
-      run: |
-        mix event_store.create
-        mix event_store.init
-      env:
-        MIX_ENV: test
-        EVENTSTORE_HOST: localhost
-        EVENTSTORE_PORT: 5432
-        EVENTSTORE_DATABASE: config_api_eventstore
-        EVENTSTORE_USERNAME: postgres
-        EVENTSTORE_PASSWORD: postgres
     - name: Run unit tests
-      run: mix test --max-cases 1
+      run: mix test --exclude integration
       env:
         MIX_ENV: test
-        EVENTSTORE_HOST: localhost
-        EVENTSTORE_PORT: 5432
-        EVENTSTORE_DATABASE: config_api_eventstore
-        EVENTSTORE_USERNAME: postgres
-        EVENTSTORE_PASSWORD: postgres
 
-    - name: Upload test results
-      if: always()
+    - name: Upload unit test results
+      if: failure()
       uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
       with:
-        name: test-results
-        path: _build/test/lib/config_api/
+        name: unit-test-results
+        path: |
+          **/*.log
+          _build/test/**/*.log
         retention-days: 7
         if-no-files-found: ignore

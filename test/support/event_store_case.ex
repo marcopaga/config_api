@@ -23,22 +23,29 @@ defmodule ConfigApi.EventStoreCase do
 
   @doc """
   Resets the EventStore by truncating all tables.
+
+  Creates a fresh connection for each reset to avoid connection pool issues.
   """
   def reset_eventstore! do
     config = EventStore.config()
 
-    {:ok, conn} = Postgrex.start_link(config)
+    # Create a fresh connection for this reset operation
+    {:ok, conn_pid} = Postgrex.start_link(config)
 
-    # Truncate all EventStore tables
-    Postgrex.query!(
-      conn,
-      "TRUNCATE TABLE streams, events, subscriptions, snapshots CASCADE;",
-      []
-    )
+    try do
+      # Truncate all EventStore tables in a single statement
+      Postgrex.query!(
+        conn_pid,
+        "TRUNCATE TABLE streams, events, subscriptions, snapshots CASCADE;",
+        [],
+        timeout: 10_000
+      )
 
-    GenServer.stop(conn)
-
-    :ok
+      :ok
+    after
+      # Always close the connection
+      GenServer.stop(conn_pid, :normal)
+    end
   rescue
     error ->
       IO.puts("Warning: Failed to reset EventStore: #{inspect(error)}")

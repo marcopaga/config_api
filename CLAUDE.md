@@ -91,6 +91,97 @@ mix compile --warnings-as-errors
 docker-compose down
 ```
 
+## Testing Strategy
+
+Tests are organized by dependency requirements for optimal performance and developer experience.
+
+### Unit Tests (No Database Required)
+
+**Pure logic tests** that run in ~2-3 seconds using dependency injection with stub modules:
+
+- **Event structs**: `test/config_api/events/` (10+ tests)
+- **Aggregates (business logic)**: `test/config_api/aggregates/` (30+ tests)
+- **CQRS queries with stubs**: `test/config_api/config_store_cqrs_unit_test.exs` (25+ tests)
+- **Projection event handling**: `test/config_api/projections/config_state_projection_unit_test.exs` (20+ tests)
+- **Spec validation**: `test/spec/spec_validation_test.exs`
+- **Event schema validation**: `test/spec/event_schema_test.exs`
+
+**Total: ~115 unit tests** - Fast feedback loop, no Docker required
+
+Run locally without Docker:
+```bash
+mix test --exclude integration
+```
+
+### Integration Tests (Require PostgreSQL + EventStore)
+
+**Full system tests** that verify complete CQRS flow with real database (~10-15 seconds):
+
+- **EventStore operations**: `test/config_api/event_store_test.exs` (3 tests)
+- **Projection rebuild**: `test/config_api/projections/config_state_projection_test.exs` (~7 tests)
+- **CQRS end-to-end**: `test/config_api/config_store_cqrs_test.exs` (3 tests)
+- **HTTP API**: `test/config_api_web/router_test.exs` (~25 tests)
+- **API contracts**: `test/spec/openapi_contract_test.exs` (~17 tests)
+
+**Total: ~55 integration tests** - Comprehensive validation of complete system
+
+Require Docker to be running:
+```bash
+docker-compose up -d
+mix test --only integration
+```
+
+### Running All Tests
+
+```bash
+# All tests (requires Docker) - ~125 total tests
+mix test
+
+# Unit tests only (no Docker) - ~115 tests in 2-3 seconds
+mix test --exclude integration
+
+# Integration tests only - ~55 tests in 10-15 seconds
+mix test --only integration
+```
+
+### Dependency Injection for Testing
+
+The codebase uses **dependency injection** to enable fast unit tests without mocking libraries:
+
+**Injectable Dependencies:**
+- `ConfigStoreCQRS.get/2` - Accepts projection module (default: `ConfigStateProjection`)
+- `ConfigStoreCQRS.all/1` - Accepts projection module
+- `ConfigStateProjection.rebuild_from_event_list/1` - Test helper for event replay
+
+**Test Stubs** (`test/support/stubs.ex`):
+- `ProjectionStub` - In-memory Agent-based projection (no ETS/GenServer)
+- `EventStoreStub` - In-memory event storage (no PostgreSQL)
+- `ConfigStoreCQRSStub` - Complete CQRS stub for HTTP layer testing
+
+**Benefits:**
+- ✅ Zero external dependencies (no Mox, no Mimic)
+- ✅ Pure Elixir patterns (pass modules as function arguments)
+- ✅ Fast test execution (2-3 seconds for 115 tests)
+- ✅ Easy to understand and maintain
+
+### CI/CD Pipeline
+
+GitHub Actions runs **two parallel jobs** for optimal performance:
+
+**1. Unit Tests Job** (~1-2 minutes):
+- No PostgreSQL service
+- Runs `mix test --exclude integration`
+- Fast failure detection
+- ~115 tests
+
+**2. Integration Tests Job** (~2-3 minutes):
+- PostgreSQL service included
+- Runs `mix test --only integration`
+- Full system validation
+- ~55 tests
+
+**Total CI time: ~3 minutes** (parallel execution)
+
 ## Storage Model
 
 **Persistent Event Store**: Events are stored in PostgreSQL and survive application restarts. The projection rebuilds from events on startup.

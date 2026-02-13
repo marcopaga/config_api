@@ -4,34 +4,60 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
 
   These tests ensure the actual API implementation matches the OpenAPI spec
   defined in spec/openapi/configapi-v1.yaml.
+
+  Integration tests with real backend. Tagged :integration - requires Docker.
+
+  Run with: mix test --only integration
   """
-  use ExUnit.Case, async: false
+  use ConfigApi.EventStoreCase, async: false
   use Plug.Test
+
+  @moduletag :integration
 
   alias ConfigApiWeb.Router
   alias ConfigApi.ConfigStoreCQRS
 
   @opts Router.init([])
-  @projection_name ConfigApi.Projections.ConfigStateProjection
 
-  # Helper to rebuild projection from events
-  defp rebuild_projection do
-    pid = Process.whereis(@projection_name)
-    if pid, do: GenServer.stop(pid, :normal)
-    Process.sleep(50)
+  # Wait for process to fully terminate
+  defp wait_for_process_stop(name, retries \\ 20) do
+    case Process.whereis(name) do
+      nil ->
+        :ok
 
+      _pid when retries > 0 ->
+        Process.sleep(10)
+        wait_for_process_stop(name, retries - 1)
+
+      _pid ->
+        # Process didn't stop, but proceed anyway
+        :ok
+    end
+  end
+
+  # Wait for projection to be ready by checking its state
+  defp wait_for_projection_ready(pid, retries \\ 20) do
     try do
-      :ets.delete(:config_state_projection)
-    rescue
-      ArgumentError -> :ok
-    end
+      # GenServer.call will fail if process isn't ready
+      case :sys.get_state(pid, 100) do
+        _ -> :ok
+      end
+    catch
+      :exit, _ when retries > 0 ->
+        Process.sleep(10)
+        wait_for_projection_ready(pid, retries - 1)
 
-    case ConfigApi.Projections.ConfigStateProjection.start_link() do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
+      :exit, _ ->
+        # Timeout, but proceed
+        :ok
     end
+  end
 
-    Process.sleep(200)
+  # Ensure projection is synced with recent events (lightweight alternative to rebuild)
+  defp ensure_projection_synced do
+    # Small delay to allow async subscription to process events
+    # This is much faster than a full rebuild (10ms vs 200ms)
+    Process.sleep(10)
   end
 
   setup do
@@ -41,10 +67,10 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
     # Stop and restart projection for clean state
     case Process.whereis(ConfigApi.Projections.ConfigStateProjection) do
       nil -> :ok
-      pid -> GenServer.stop(pid, :normal)
+      pid -> GenServer.stop(pid, :normal, 5000)
     end
 
-    Process.sleep(50)
+    wait_for_process_stop(ConfigApi.Projections.ConfigStateProjection)
 
     try do
       :ets.delete(:config_state_projection)
@@ -54,11 +80,14 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
 
     # Start fresh projection
     case ConfigApi.Projections.ConfigStateProjection.start_link() do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-    end
+      {:ok, pid} ->
+        wait_for_projection_ready(pid)
+        :ok
 
-    Process.sleep(100)
+      {:error, {:already_started, pid}} ->
+        wait_for_projection_ready(pid)
+        :ok
+    end
 
     :ok
   end
@@ -98,7 +127,8 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
     test "returns array of ConfigListItem schema" do
       ConfigStoreCQRS.put("api_key", "secret123")
       ConfigStoreCQRS.put("database_url", "postgresql://localhost/mydb")
-      rebuild_projection()
+      # Give projection time to catch up via subscription
+      ensure_projection_synced()
 
       conn = conn(:get, "/v1/config")
       conn = Router.call(conn, @opts)
@@ -133,7 +163,7 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
   describe "OpenAPI Contract: GET /v1/config/:name" do
     test "returns plain text value (200)" do
       ConfigStoreCQRS.put("api_key", "secret123")
-      rebuild_projection()
+      ensure_projection_synced()
 
       conn = conn(:get, "/v1/config/api_key")
       conn = Router.call(conn, @opts)
@@ -200,7 +230,7 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
   describe "OpenAPI Contract: DELETE /v1/config/:name" do
     test "returns 200 OK when deleting existing config" do
       ConfigStoreCQRS.put("to_delete", "value")
-      rebuild_projection()
+      ensure_projection_synced()
 
       conn = conn(:delete, "/v1/config/to_delete")
       conn = Router.call(conn, @opts)
@@ -221,10 +251,10 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
 
     test "returns 410 Gone for already deleted config" do
       ConfigStoreCQRS.put("key", "value")
-      rebuild_projection()
+      ensure_projection_synced()
 
       ConfigStoreCQRS.delete("key")
-      rebuild_projection()
+      ensure_projection_synced()
 
       conn = conn(:delete, "/v1/config/key")
       conn = Router.call(conn, @opts)
@@ -315,10 +345,11 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
   describe "OpenAPI Contract: GET /v1/config/:name/at/:timestamp" do
     test "returns plain text value for valid timestamp (200)" do
       ConfigStoreCQRS.put("key", "v1")
-      Process.sleep(200)
+      # Small delay to ensure different timestamps
+      Process.sleep(50)
 
       timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
-      Process.sleep(200)
+      Process.sleep(50)
 
       ConfigStoreCQRS.put("key", "v2")
 
@@ -369,9 +400,9 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
 
       # 410 error (requires setup)
       ConfigStoreCQRS.put("temp", "value")
-      rebuild_projection()
+      ensure_projection_synced()
       ConfigStoreCQRS.delete("temp")
-      rebuild_projection()
+      ensure_projection_synced()
 
       conn_410 = conn(:delete, "/v1/config/temp")
       conn_410 = Router.call(conn_410, @opts)
