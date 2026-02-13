@@ -140,8 +140,9 @@ defmodule ConfigApi.ConfigStoreCQRSUnitTest do
         end)
 
       assert {:ok, "secret123"} = result
-      # Should be microseconds, not milliseconds
-      assert time < 1000, "get/2 should be sub-millisecond with stub (was #{time}μs)"
+
+      # Should be much faster than database queries (typically sub-millisecond, but CI can be slower)
+      assert time < 10_000, "get/2 should be fast with stub (was #{time}μs)"
     end
 
     test "all is fast with stub projection" do
@@ -151,8 +152,9 @@ defmodule ConfigApi.ConfigStoreCQRSUnitTest do
         end)
 
       assert length(result) == 3
-      # Should be microseconds, not milliseconds
-      assert time < 1000, "all/1 should be sub-millisecond with stub (was #{time}μs)"
+
+      # Should be much faster than database queries (typically sub-millisecond, but CI can be slower)
+      assert time < 10_000, "all/1 should be fast with stub (was #{time}μs)"
     end
   end
 

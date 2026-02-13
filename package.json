@@ -13,7 +13,9 @@
   "devDependencies": {
     "@redocly/cli": "^1.0.0",
     "ajv-cli": "^5.0.0",
-    "@asyncapi/cli": "^1.0.0"
+    "@asyncapi/cli": "^1.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
   },
   "engines": {
     "node": ">=20.0.0"
