@@ -1,5 +1,14 @@
 defmodule ConfigApi.EventStoreTest do
+  @moduledoc """
+  Integration tests for EventStore operations.
+
+  Tests the EventStore contract with PostgreSQL. Tagged :integration - requires Docker.
+
+  Run with: mix test --only integration
+  """
   use ConfigApi.EventStoreCase, async: false
+
+  @moduletag :integration
 
   alias ConfigApi.EventStore, as: ES
 

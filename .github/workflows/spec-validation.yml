@@ -175,7 +175,7 @@ jobs:
           EVENTSTORE_PASSWORD: postgres
 
       - name: Run contract tests
-        run: mix test test/spec/
+        run: mix test test/spec/ --only integration
         env:
           MIX_ENV: test
           EVENTSTORE_HOST: localhost

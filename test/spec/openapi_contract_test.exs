@@ -4,9 +4,15 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
 
   These tests ensure the actual API implementation matches the OpenAPI spec
   defined in spec/openapi/configapi-v1.yaml.
+
+  Integration tests with real backend. Tagged :integration - requires Docker.
+
+  Run with: mix test --only integration
   """
   use ExUnit.Case, async: false
   use Plug.Test
+
+  @moduletag :integration
 
   alias ConfigApiWeb.Router
   alias ConfigApi.ConfigStoreCQRS

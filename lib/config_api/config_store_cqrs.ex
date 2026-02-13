@@ -23,13 +23,17 @@ defmodule ConfigApi.ConfigStoreCQRS do
   Uses the projection for fast reads (CQRS read path).
 
   Returns {:ok, value} if found, {:error, :not_found} otherwise.
+
+  ## Options
+  - `projection` - Projection module to use (default: ConfigStateProjection).
+    Injectable for testing without database dependency.
   """
-  @spec get(String.t()) :: {:ok, String.t()} | {:error, :not_found | :internal_error}
-  def get(name) do
+  @spec get(String.t(), module()) :: {:ok, String.t()} | {:error, :not_found | :internal_error}
+  def get(name, projection \\ ConfigStateProjection) do
     Logger.debug("ConfigStoreCQRS.get/1 called with name=#{inspect(name)}")
 
     try do
-      result = ConfigStateProjection.get_config(name)
+      result = projection.get_config(name)
       Logger.debug("ConfigStoreCQRS.get/1 result for #{name}: #{inspect(result)}")
       result
     rescue
@@ -122,13 +126,17 @@ defmodule ConfigApi.ConfigStoreCQRS do
   Uses the projection for fast reads.
 
   Returns a list of maps with :name and :value keys.
+
+  ## Options
+  - `projection` - Projection module to use (default: ConfigStateProjection).
+    Injectable for testing without database dependency.
   """
-  @spec all() :: [%{name: String.t(), value: String.t()}]
-  def all do
+  @spec all(module()) :: [%{name: String.t(), value: String.t()}]
+  def all(projection \\ ConfigStateProjection) do
     Logger.debug("ConfigStoreCQRS.all/0 called")
 
     try do
-      result = ConfigStateProjection.get_all_configs()
+      result = projection.get_all_configs()
       Logger.debug("ConfigStoreCQRS.all/0 returned #{length(result)} configs")
       result
     rescue

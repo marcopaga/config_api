@@ -63,6 +63,24 @@ defmodule ConfigApi.Projections.ConfigStateProjection do
     :ok
   end
 
+  @doc """
+  Rebuild projection from a list of events.
+
+  This is a test helper that allows unit tests to rebuild the projection
+  state from an in-memory list of events without EventStore dependency.
+
+  ## Example
+      events = [
+        %ConfigValueSet{config_name: "key1", value: "value1"},
+        %ConfigValueSet{config_name: "key2", value: "value2"}
+      ]
+      ConfigStateProjection.rebuild_from_event_list(events)
+  """
+  def rebuild_from_event_list(events) when is_list(events) do
+    Enum.each(events, &apply_event/1)
+    :ok
+  end
+
   ## Server Callbacks
 
   @impl true

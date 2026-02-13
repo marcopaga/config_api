@@ -1,6 +1,16 @@
 defmodule ConfigApiWeb.RouterTest do
+  @moduledoc """
+  Integration tests for HTTP Router with real CQRS backend.
+
+  Tests complete HTTP request/response flow with PostgreSQL/EventStore.
+  Tagged :integration - requires Docker.
+
+  Run with: mix test --only integration
+  """
   use ExUnit.Case, async: false
   use Plug.Test
+
+  @moduletag :integration
 
   alias ConfigApiWeb.Router
   alias ConfigApi.ConfigStoreCQRS
