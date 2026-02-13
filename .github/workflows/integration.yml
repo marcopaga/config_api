@@ -44,10 +44,11 @@ jobs:
         with:
           path: |
             deps
-            _build
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+            _build/dev
+          key: ${{ runner.os }}-mix-otp28-elixir1.18-dev-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-
+            ${{ runner.os }}-mix-otp28-elixir1.18-dev-
+            ${{ runner.os }}-mix-otp28-elixir1.18-
 
       - name: Install dependencies
         run: mix deps.get
@@ -120,7 +121,7 @@ jobs:
         with:
           name: server-logs
           path: |
-            _build/dev/lib/config_api/
-            *.log
+            **/*.log
+            _build/dev/**/*.log
           retention-days: 7
           if-no-files-found: ignore

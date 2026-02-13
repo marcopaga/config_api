@@ -1,0 +1,21 @@
+{
+  "name": "config-api-spec-tools",
+  "version": "1.0.0",
+  "description": "Specification validation tools for ConfigAPI",
+  "private": true,
+  "scripts": {
+    "lint:openapi": "redocly lint spec/openapi/configapi-v1.yaml",
+    "build:docs": "redocly build-docs spec/openapi/configapi-v1.yaml -o docs/api-reference.html",
+    "validate:json-schema": "ajv compile -s spec/json-schema/events/config-value-set.json --strict=false && ajv compile -s spec/json-schema/events/config-value-deleted.json --strict=false && ajv compile -s spec/json-schema/aggregates/config-value.json --strict=false",
+    "validate:asyncapi": "asyncapi validate spec/asyncapi/config-events-v1.yaml",
+    "validate:all": "npm run lint:openapi && npm run validate:json-schema && npm run validate:asyncapi"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^1.0.0",
+    "ajv-cli": "^5.0.0",
+    "@asyncapi/cli": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

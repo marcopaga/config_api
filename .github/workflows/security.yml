@@ -33,9 +33,9 @@ jobs:
         uses: actions/cache@b7e8d49f17405cc70c1c120101943203c98d3a4b # v4
         with:
           path: deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-mix-otp28-elixir1.18-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-
+            ${{ runner.os }}-mix-otp28-elixir1.18-
 
       - name: Install dependencies
         run: mix deps.get
@@ -102,10 +102,11 @@ jobs:
         with:
           path: |
             deps
-            _build
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+            _build/test
+          key: ${{ runner.os }}-mix-otp28-elixir1.18-test-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-
+            ${{ runner.os }}-mix-otp28-elixir1.18-test-
+            ${{ runner.os }}-mix-otp28-elixir1.18-
 
       - name: Install dependencies
         run: mix deps.get
