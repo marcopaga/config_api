@@ -13,7 +13,6 @@ defmodule ConfigApi.ConfigStoreCQRSTest do
 
   alias ConfigApi.ConfigStoreCQRS
   alias ConfigApi.Projections.ConfigStateProjection
-  alias ConfigApi.Events.{ConfigValueSet, ConfigValueDeleted}
 
   # Ensure event type atoms exist for deserialization
   _ = :"ConfigApi.Events.ConfigValueSet"

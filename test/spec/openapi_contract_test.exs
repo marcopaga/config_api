@@ -18,7 +18,6 @@ defmodule ConfigApi.Spec.OpenAPIContractTest do
   alias ConfigApi.ConfigStoreCQRS
 
   @opts Router.init([])
-  @projection_name ConfigApi.Projections.ConfigStateProjection
 
   # Wait for process to fully terminate
   defp wait_for_process_stop(name, retries \\ 20) do
