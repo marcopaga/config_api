@@ -24,51 +24,31 @@ defmodule ConfigApi.EventStoreCase do
   @doc """
   Resets the EventStore by truncating all tables.
 
-  Uses a persistent connection pool to avoid connection overhead.
+  Creates a fresh connection for each reset to avoid connection pool issues.
   """
   def reset_eventstore! do
     config = EventStore.config()
 
-    # Reuse connection from EventStore if possible
-    conn_pid =
-      case get_or_create_test_connection(config) do
-        {:ok, pid} ->
-          pid
+    # Create a fresh connection for this reset operation
+    {:ok, conn_pid} = Postgrex.start_link(config)
 
-        {:error, _} ->
-          # Fallback: create temporary connection
-          {:ok, pid} = Postgrex.start_link(config)
-          pid
-      end
+    try do
+      # Truncate all EventStore tables in a single statement
+      Postgrex.query!(
+        conn_pid,
+        "TRUNCATE TABLE streams, events, subscriptions, snapshots CASCADE;",
+        [],
+        timeout: 10_000
+      )
 
-    # Truncate all EventStore tables in a single statement
-    Postgrex.query!(
-      conn_pid,
-      "TRUNCATE TABLE streams, events, subscriptions, snapshots CASCADE;",
-      [],
-      timeout: 5000
-    )
-
-    :ok
+      :ok
+    after
+      # Always close the connection
+      GenServer.stop(conn_pid, :normal)
+    end
   rescue
     error ->
       IO.puts("Warning: Failed to reset EventStore: #{inspect(error)}")
       :ok
-  end
-
-  # Get or create a persistent test connection
-  defp get_or_create_test_connection(config) do
-    case Process.whereis(:test_event_store_conn) do
-      nil ->
-        case Postgrex.start_link([{:name, :test_event_store_conn} | config]) do
-          {:ok, pid} -> {:ok, pid}
-          {:error, {:already_started, pid}} -> {:ok, pid}
-          # Should never happen, but handle it anyway
-          error -> error
-        end
-
-      pid ->
-        {:ok, pid}
-    end
   end
 end

@@ -7,7 +7,7 @@ defmodule ConfigApi.ConfigStoreCQRSTest do
 
   Run with: mix test --only integration
   """
-  use ExUnit.Case, async: false
+  use ConfigApi.EventStoreCase, async: false
 
   @moduletag :integration
 

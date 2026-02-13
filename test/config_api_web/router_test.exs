@@ -7,7 +7,7 @@ defmodule ConfigApiWeb.RouterTest do
 
   Run with: mix test --only integration
   """
-  use ExUnit.Case, async: false
+  use ConfigApi.EventStoreCase, async: false
   use Plug.Test
 
   @moduletag :integration

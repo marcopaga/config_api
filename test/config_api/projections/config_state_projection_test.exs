@@ -9,7 +9,7 @@ defmodule ConfigApi.Projections.ConfigStateProjectionTest do
 
   Unit tests (event application logic) are in config_state_projection_unit_test.exs
   """
-  use ExUnit.Case, async: false
+  use ConfigApi.EventStoreCase, async: false
 
   @moduletag :integration
 
@@ -18,6 +18,8 @@ defmodule ConfigApi.Projections.ConfigStateProjectionTest do
 
   # Stop the application's projection if running
   setup do
+    # First, EventStore is reset by EventStoreCase
+
     # Stop the application's projection to avoid conflicts
     case Process.whereis(ConfigStateProjection) do
       nil -> :ok
