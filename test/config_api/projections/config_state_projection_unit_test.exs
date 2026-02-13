@@ -221,9 +221,10 @@ defmodule ConfigApi.Projections.ConfigStateProjectionUnitTest do
       ensure_projection_started()
 
       # Create 1000 events
-      events = for i <- 1..1000 do
-        %ConfigValueSet{config_name: "key_#{i}", value: "value_#{i}"}
-      end
+      events =
+        for i <- 1..1000 do
+          %ConfigValueSet{config_name: "key_#{i}", value: "value_#{i}"}
+        end
 
       assert :ok = ConfigStateProjection.rebuild_from_event_list(events)
 
@@ -301,8 +302,10 @@ defmodule ConfigApi.Projections.ConfigStateProjectionUnitTest do
         try do
           :ets.new(@table_name, [:set, :named_table, :public, read_concurrency: true])
         rescue
-          ArgumentError -> :ok  # Table already exists
+          # Table already exists
+          ArgumentError -> :ok
         end
+
       _pid ->
         :ok
     end

@@ -7,7 +7,8 @@ defmodule ConfigApi.ConfigStoreCQRSUnitTest do
 
   Tests focus on the CQRS query logic with mocked projection.
   """
-  use ExUnit.Case, async: false  # Must be false because ProjectionStub uses named Agent
+  # Must be false because ProjectionStub uses named Agent
+  use ExUnit.Case, async: false
 
   alias ConfigApi.ConfigStoreCQRS
   alias ConfigApi.Test.Stubs.ProjectionStub
@@ -20,15 +21,17 @@ defmodule ConfigApi.ConfigStoreCQRSUnitTest do
       catch
         :exit, _ -> :ok
       end
+
       Process.sleep(10)
     end
 
     # Start stub projection with predefined test data
-    {:ok, _pid} = ProjectionStub.start_link(%{
-      "existing_key" => "existing_value",
-      "api_key" => "secret123",
-      "database_url" => "postgres://localhost"
-    })
+    {:ok, _pid} =
+      ProjectionStub.start_link(%{
+        "existing_key" => "existing_value",
+        "api_key" => "secret123",
+        "database_url" => "postgres://localhost"
+      })
 
     on_exit(fn ->
       # Safely stop the Agent if it exists
@@ -123,16 +126,18 @@ defmodule ConfigApi.ConfigStoreCQRSUnitTest do
       end
 
       configs = ConfigStoreCQRS.all(ProjectionStub)
-      assert length(configs) == 103  # 3 initial + 100 new
+      # 3 initial + 100 new
+      assert length(configs) == 103
     end
   end
 
   describe "query performance characteristics" do
     test "get is fast with stub projection" do
       # This test demonstrates the performance benefit
-      {time, result} = :timer.tc(fn ->
-        ConfigStoreCQRS.get("api_key", ProjectionStub)
-      end)
+      {time, result} =
+        :timer.tc(fn ->
+          ConfigStoreCQRS.get("api_key", ProjectionStub)
+        end)
 
       assert {:ok, "secret123"} = result
       # Should be microseconds, not milliseconds
@@ -140,9 +145,10 @@ defmodule ConfigApi.ConfigStoreCQRSUnitTest do
     end
 
     test "all is fast with stub projection" do
-      {time, result} = :timer.tc(fn ->
-        ConfigStoreCQRS.all(ProjectionStub)
-      end)
+      {time, result} =
+        :timer.tc(fn ->
+          ConfigStoreCQRS.all(ProjectionStub)
+        end)
 
       assert length(result) == 3
       # Should be microseconds, not milliseconds
@@ -160,9 +166,10 @@ defmodule ConfigApi.ConfigStoreCQRSUnitTest do
     test "stub projection matches real projection interface for get_all_configs" do
       result = ProjectionStub.get_all_configs()
       assert is_list(result)
+
       assert Enum.all?(result, fn item ->
-        is_map(item) and Map.has_key?(item, :name) and Map.has_key?(item, :value)
-      end)
+               is_map(item) and Map.has_key?(item, :name) and Map.has_key?(item, :value)
+             end)
     end
   end
 end

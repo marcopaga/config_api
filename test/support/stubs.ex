@@ -84,12 +84,13 @@ defmodule ConfigApi.Test.Stubs do
 
     @doc "Read stream forward (simulates EventStore.read_stream_forward)"
     def read_stream_forward(stream_uuid, start_version \\ 0, count \\ 1000) do
-      events = Agent.get(__MODULE__, fn state ->
-        state
-        |> Enum.filter(fn event -> event.stream_uuid == stream_uuid end)
-        |> Enum.drop(start_version)
-        |> Enum.take(count)
-      end)
+      events =
+        Agent.get(__MODULE__, fn state ->
+          state
+          |> Enum.filter(fn event -> event.stream_uuid == stream_uuid end)
+          |> Enum.drop(start_version)
+          |> Enum.take(count)
+        end)
 
       {:ok, events}
     end
