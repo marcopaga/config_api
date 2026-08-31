@@ -29,7 +29,7 @@ defmodule ConfigApi.MixProject do
     [
       {:plug_cowboy, "~> 2.0"},
       {:jason, "~> 1.2"},
-      {:memento, "~> 0.5.0"},
+      {:memento, "~> 0.6.0"},
       # EventStore dependencies for CQRS migration
       {:eventstore, "~> 1.4.8"},
       {:postgrex, "~> 0.21.1"},
